@@ -9,13 +9,23 @@ import {
   TouchableWithoutFeedback,
   Image,
   ScrollView,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import * as Google from 'expo-auth-session/providers/google';
 import { X, ShieldCheck, Calendar, AlertTriangle, ArrowRight, ChevronDown, User, Mail, Phone } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import PhoneInput from './PhoneInput';
 import { validateEmail, validatePhone } from '../utils/validation';
+import {
+  GOOGLE_CLIENT_ID,
+  parseJwt,
+  fetchGoogleUserInfo,
+  signInWithGoogleWebGsi,
+  loadGsiScript,
+} from '../services/googleAuth';
 
 function GoogleIcon({ size = 18 }) {
   return (
@@ -101,6 +111,87 @@ export default function AuthModal({
   const [otpSent, setOtpSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // Expo AuthSession Hook for Google authentication
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_CLIENT_ID,
+    webClientId: GOOGLE_CLIENT_ID,
+    scopes: ['openid', 'profile', 'email'],
+    selectAccount: true,
+  });
+
+  // Preload Google Identity Services script on web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      loadGsiScript().catch((err) =>
+        console.log('[AuthModal] Preload GSI notice:', err.message)
+      );
+    }
+  }, []);
+
+  // Handle Expo AuthSession response
+  useEffect(() => {
+    if (!googleResponse) return;
+
+    if (googleResponse.type === 'success') {
+      const { id_token, access_token } = googleResponse.params || {};
+      console.log('[AuthModal] Google OAuth response success:', { id_token, access_token, params: googleResponse.params });
+
+      const handleAuthSuccess = async () => {
+        setIsGoogleLoading(true);
+        setErrorMsg('');
+        try {
+          let userProfile = null;
+          if (id_token) {
+            const decoded = parseJwt(id_token);
+            console.log('[AuthModal] Decoded Google ID Token Payload:', decoded);
+            userProfile = {
+              name: decoded?.name || decoded?.email?.split('@')[0] || 'Google Rider',
+              email: decoded?.email || '',
+              avatar: decoded?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+              loginMethod: 'google',
+              idToken: id_token,
+              googleId: decoded?.sub || '',
+            };
+          } else if (access_token) {
+            const userInfo = await fetchGoogleUserInfo(access_token);
+            console.log('[AuthModal] Retrieved Google UserInfo:', userInfo);
+            userProfile = {
+              name: userInfo?.name || userInfo?.email?.split('@')[0] || 'Google Rider',
+              email: userInfo?.email || '',
+              avatar: userInfo?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+              loginMethod: 'google',
+              idToken: null,
+              googleId: userInfo?.sub || '',
+            };
+          }
+
+          if (userProfile) {
+            console.log('[AuthModal] Authenticated Google User Profile:', userProfile);
+            resetAllFields();
+            if (onLogin) onLogin(userProfile);
+            if (onClose) onClose();
+          }
+        } catch (err) {
+          console.error('[AuthModal] Error parsing Google user data:', err);
+          setErrorMsg(isHindi ? 'गूगल प्रोफ़ाइल प्राप्त करने में विफल।' : 'Failed to retrieve Google profile.');
+        } finally {
+          setIsGoogleLoading(false);
+        }
+      };
+
+      handleAuthSuccess();
+    } else if (googleResponse.type === 'cancel' || googleResponse.type === 'dismiss') {
+      console.log('[AuthModal] Google login popup was closed or cancelled by user.');
+      setIsGoogleLoading(false);
+      setErrorMsg(isHindi ? 'गूगल लॉगिन रद्द कर दिया गया।' : 'Google login was cancelled.');
+    } else if (googleResponse.type === 'error') {
+      console.error('[AuthModal] Google login error:', googleResponse.error);
+      setIsGoogleLoading(false);
+      setErrorMsg(googleResponse.error?.message || 'Google authentication failed.');
+    }
+  }, [googleResponse]);
 
   const monthsList = isHindi ? MONTHS_HI : MONTHS_EN;
 
@@ -118,6 +209,7 @@ export default function AuthModal({
     setOtpSent(false);
     setErrorMsg('');
     setInfoMsg('');
+    setIsGoogleLoading(false);
     setActiveTab('signin');
   };
 
@@ -250,19 +342,70 @@ export default function AuthModal({
     if (onClose) onClose();
   };
 
-  const handleGoogleLogin = () => {
-    const googleUser = {
-      name: isHindi ? 'राइडर (गूगल)' : 'Google Rider',
-      email: 'rider.google@gmail.com',
-      phone: '9876543210',
-      countryCode: '+91',
-      dob: '1998-05-12',
-      loginMethod: 'google',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-    };
-    resetAllFields();
-    if (onLogin) onLogin(googleUser);
-    if (onClose) onClose();
+  const handleGoogleLogin = async () => {
+    setErrorMsg('');
+    setIsGoogleLoading(true);
+
+    if (Platform.OS === 'web') {
+      try {
+        // Preferred web flow: Google Identity Services (GIS) Popup Flow
+        // Directly integrates with Google Web OAuth, supports popup with clean error handling,
+        // and retrieves user profile + idToken without redirect_uri mismatch
+        const res = await signInWithGoogleWebGsi();
+        if (res?.profile) {
+          console.log('[AuthModal] Google User authenticated via GIS:', res.profile, 'idToken:', res.idToken);
+          resetAllFields();
+          if (onLogin) onLogin(res.profile);
+          if (onClose) onClose();
+          return;
+        }
+      } catch (gisErr) {
+        if (gisErr?.isCancelled) {
+          console.log('[AuthModal] Google login popup was closed by user.');
+          setIsGoogleLoading(false);
+          setErrorMsg(isHindi ? 'गूगल लॉगिन रद्द कर दिया गया।' : 'Google login popup was closed.');
+          return;
+        }
+        console.warn('[AuthModal] GIS flow encountered notice, falling back to Expo AuthSession:', gisErr);
+
+        // Fallback to Expo AuthSession promptAsync
+        if (promptGoogleAsync) {
+          try {
+            const promptResult = await promptGoogleAsync();
+            if (promptResult?.type === 'cancel' || promptResult?.type === 'dismiss') {
+              setIsGoogleLoading(false);
+              setErrorMsg(isHindi ? 'गूगल लॉगिन रद्द कर दिया गया।' : 'Google login was cancelled.');
+              return;
+            }
+          } catch (expoErr) {
+            console.error('[AuthModal] Expo AuthSession error:', expoErr);
+            setIsGoogleLoading(false);
+            setErrorMsg(expoErr?.message || 'Google sign-in failed. Please try again.');
+          }
+        } else {
+          setIsGoogleLoading(false);
+          setErrorMsg(gisErr?.message || 'Google sign-in failed. Please try again.');
+        }
+      }
+    } else {
+      // Mobile platforms (iOS / Android)
+      if (promptGoogleAsync) {
+        try {
+          const res = await promptGoogleAsync();
+          if (res?.type === 'cancel' || res?.type === 'dismiss') {
+            setIsGoogleLoading(false);
+            setErrorMsg(isHindi ? 'गूगल लॉगिन रद्द कर दिया गया।' : 'Google login was cancelled.');
+          }
+        } catch (err) {
+          console.error('[AuthModal] Native Google Auth error:', err);
+          setIsGoogleLoading(false);
+          setErrorMsg(err?.message || 'Google sign-in failed.');
+        }
+      } else {
+        setIsGoogleLoading(false);
+        setErrorMsg('Google Sign-In is initializing. Please try again.');
+      }
+    }
   };
 
   const handleSignOut = () => {
@@ -570,13 +713,20 @@ export default function AuthModal({
                         </View>
 
                         <TouchableOpacity
-                          style={styles.googleBtn}
+                          style={[styles.googleBtn, isGoogleLoading && { opacity: 0.7 }]}
                           onPress={handleGoogleLogin}
+                          disabled={isGoogleLoading}
                           activeOpacity={0.85}
                         >
-                          <GoogleIcon size={18} />
+                          {isGoogleLoading ? (
+                            <ActivityIndicator size="small" color="#38BDF8" />
+                          ) : (
+                            <GoogleIcon size={18} />
+                          )}
                           <Text style={styles.googleBtnText}>
-                            {t('auth.continueGoogle', 'Continue with Google')}
+                            {isGoogleLoading
+                              ? (isHindi ? 'गूगल से जुड़ रहे हैं...' : 'Connecting to Google...')
+                              : t('auth.continueGoogle', 'Continue with Google')}
                           </Text>
                         </TouchableOpacity>
                       </View>
