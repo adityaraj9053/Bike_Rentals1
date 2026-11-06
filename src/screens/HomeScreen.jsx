@@ -23,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Compass,
+  Sparkles,
+  Shield,
 } from 'lucide-react-native';
 import { BIKES_DATA, CATEGORIES_DATA, FAQS_DATA, TESTIMONIALS_DATA } from '../data/bikes';
 import { IMAGES } from '../assets/images';
@@ -116,6 +118,18 @@ export default function HomeScreen({
             >
               <Bike size={17} color="#FFFFFF" />
               <Text style={styles.btnPrimaryText}>{t('hero.exploreBikes', 'Explore Bikes')}</Text>
+            </TouchableOpacity>
+
+            {/* List Your Bike & Earn button */}
+            <TouchableOpacity
+              style={styles.btnRentBikeHero}
+              onPress={() => {
+                navigation.navigate('RentBike');
+              }}
+              activeOpacity={0.8}
+            >
+              <Sparkles size={16} color="#FFFFFF" />
+              <Text style={styles.btnRentBikeHeroText}>Rent Your Bike & Earn</Text>
             </TouchableOpacity>
 
             {/* WhatsApp Enquiry button - luxury styling with authentic WhatsApp icon */}
@@ -409,6 +423,59 @@ export default function HomeScreen({
         </View>
       </View>
 
+      {/* ================= RENT YOUR BIKE OWNER OPPORTUNITY SECTION ================= */}
+      <View style={styles.ownerOpportunitySection}>
+        <View style={styles.centerContainer}>
+          <View style={styles.ownerOpportunityCard}>
+            <View style={styles.ownerOppBadge}>
+              <Sparkles size={14} color="#38BDF8" />
+              <Text style={styles.ownerOppBadgeText}>EARNING OPPORTUNITY FOR BIKE OWNERS</Text>
+            </View>
+            <Text style={styles.ownerOppTitle}>
+              Rent Your Bike – Turn Your Bike into an Earning Opportunity
+            </Text>
+            <Text style={styles.ownerOppSub}>
+              List your bike, connect with potential renters, and earn by sharing your vehicle with verified riders. We provide complete background KYC, escrow security deposits, and digital rental agreements.
+            </Text>
+
+            <View style={styles.ownerPerksRow}>
+              <View style={styles.ownerPerkItem}>
+                <ShieldCheck size={18} color="#10B981" />
+                <Text style={styles.ownerPerkText}>100% KYC Verified Riders</Text>
+              </View>
+              <View style={styles.ownerPerkItem}>
+                <ShieldCheck size={18} color="#10B981" />
+                <Text style={styles.ownerPerkText}>Escrow Deposit Protection</Text>
+              </View>
+              <View style={styles.ownerPerkItem}>
+                <ShieldCheck size={18} color="#10B981" />
+                <Text style={styles.ownerPerkText}>Guaranteed Daily Payouts</Text>
+              </View>
+            </View>
+
+            <View style={styles.ownerOppBtns}>
+              <TouchableOpacity
+                style={styles.ownerListNowBtn}
+                onPress={() => navigation.navigate('RentBike')}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={16} color="#FFFFFF" />
+                <Text style={styles.ownerListNowBtnText}>Start Listing Your Bike</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.adminPortalLinkBtn}
+                onPress={() => navigation.navigate('AdminDashboard')}
+                activeOpacity={0.8}
+              >
+                <Shield size={15} color="#38BDF8" />
+                <Text style={styles.adminPortalLinkText}>Admin Operations Portal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+
       {/* ================= BOTTOM LUXURY CTA BANNER ================= */}
       <View style={styles.ctaBannerSection}>
         <View style={styles.centerContainer}>
@@ -550,6 +617,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: 0.3,
+  },
+  btnRentBikeHero: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: RADIUS.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  btnRentBikeHeroText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
   btnWhatsAppDark: {
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -952,6 +1041,124 @@ const styles = StyleSheet.create({
   },
   ctaWhatsAppBtnText: {
     color: '#34D399',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  ownerOpportunitySection: {
+    paddingVertical: 36,
+    backgroundColor: '#050B14',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.borderCard,
+  },
+  ownerOpportunityCard: {
+    backgroundColor: '#0C162A',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderRadius: RADIUS.xl,
+    paddingVertical: 34,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    textAlign: 'center',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  ownerOppBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    marginBottom: 12,
+  },
+  ownerOppBadgeText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  ownerOppTitle: {
+    fontSize: width < 768 ? 20 : 26,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginBottom: 10,
+    textAlign: 'center',
+    maxWidth: 720,
+    lineHeight: width < 768 ? 26 : 34,
+  },
+  ownerOppSub: {
+    fontSize: 13.5,
+    color: '#94A3B8',
+    textAlign: 'center',
+    maxWidth: 640,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+  ownerPerksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  ownerPerkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  ownerPerkText: {
+    color: '#E2E8F0',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  ownerOppBtns: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  ownerListNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  ownerListNowBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  adminPortalLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: RADIUS.full,
+  },
+  adminPortalLinkText: {
+    color: '#CBD5E1',
     fontSize: 13.5,
     fontWeight: '700',
   },

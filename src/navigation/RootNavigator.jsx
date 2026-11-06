@@ -8,6 +8,7 @@ import {
   HelpCircle,
   Users,
   PhoneCall,
+  Sparkles,
 } from 'lucide-react-native';
 
 import HomeScreen from '../screens/HomeScreen';
@@ -17,6 +18,8 @@ import AboutUsScreen from '../screens/AboutUsScreen';
 import ContactScreen from '../screens/ContactScreen';
 import BikeDetailsScreen from '../screens/BikeDetailsScreen';
 import BookingScreen from '../screens/BookingScreen';
+import RentBikeScreen from '../screens/RentBikeScreen';
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import CustomHeader from '../components/CustomHeader';
 
 import { COLORS } from '../theme/colors';
@@ -33,12 +36,13 @@ function BottomTabNavigator({
   onStartBooking,
   onOpenBookModal,
   onShowToast,
+  onBikeSubmitted,
 }) {
   const { t } = useLanguage();
 
   return (
     <Tab.Navigator
-      screenOptions={({ navigation, route }) => ({
+      screenOptions={({ navigation }) => ({
         header: () => (
           <CustomHeader
             navigation={navigation}
@@ -69,7 +73,7 @@ function BottomTabNavigator({
         name="Home"
         options={{
           tabBarLabel: t('nav.home', 'Home'),
-          tabBarIcon: ({ color, size }) => <Compass size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Compass size={22} color={color} />,
         }}
       >
         {(props) => (
@@ -87,7 +91,7 @@ function BottomTabNavigator({
         name="Motorbikes"
         options={{
           tabBarLabel: t('nav.fleet', 'Fleet'),
-          tabBarIcon: ({ color, size }) => <Bike size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Bike size={22} color={color} />,
         }}
       >
         {(props) => (
@@ -102,10 +106,26 @@ function BottomTabNavigator({
       </Tab.Screen>
 
       <Tab.Screen
+        name="RentBikeTab"
+        options={{
+          tabBarLabel: 'Rent Bike',
+          tabBarIcon: ({ color }) => <Sparkles size={22} color={color} />,
+        }}
+      >
+        {(props) => (
+          <RentBikeScreen
+            {...props}
+            onShowToast={onShowToast}
+            onBikeSubmitted={onBikeSubmitted}
+          />
+        )}
+      </Tab.Screen>
+
+      <Tab.Screen
         name="HowItWorks"
         options={{
           tabBarLabel: t('nav.guide', 'Guide'),
-          tabBarIcon: ({ color, size }) => <HelpCircle size={22} color={color} />,
+          tabBarIcon: ({ color }) => <HelpCircle size={22} color={color} />,
         }}
         component={HowItWorksScreen}
       />
@@ -114,7 +134,7 @@ function BottomTabNavigator({
         name="AboutUs"
         options={{
           tabBarLabel: t('nav.about', 'About'),
-          tabBarIcon: ({ color, size }) => <Users size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Users size={22} color={color} />,
         }}
         component={AboutUsScreen}
       />
@@ -123,7 +143,7 @@ function BottomTabNavigator({
         name="Contact"
         options={{
           tabBarLabel: t('nav.contact', 'Contact'),
-          tabBarIcon: ({ color, size }) => <PhoneCall size={22} color={color} />,
+          tabBarIcon: ({ color }) => <PhoneCall size={22} color={color} />,
         }}
       >
         {(props) => (
@@ -147,6 +167,8 @@ export default function RootNavigator({
   onStartBooking,
   onOpenBookModal,
   onShowToast,
+  sharedBikes,
+  onBikeSubmitted,
 }) {
   const { t } = useLanguage();
 
@@ -169,6 +191,37 @@ export default function RootNavigator({
             onStartBooking={onStartBooking}
             onOpenBookModal={onOpenBookModal}
             onShowToast={onShowToast}
+            onBikeSubmitted={onBikeSubmitted}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="RentBike"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <RentBikeScreen
+            {...props}
+            onShowToast={onShowToast}
+            onBikeSubmitted={onBikeSubmitted}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="AdminDashboard"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <AdminDashboardScreen
+            {...props}
+            onShowToast={onShowToast}
+            sharedBikes={sharedBikes}
           />
         )}
       </Stack.Screen>

@@ -18,6 +18,7 @@ import FloatingWhatsApp from './src/components/FloatingWhatsApp';
 import Toast from './src/components/Toast';
 
 import { BIKES_DATA } from './src/data/bikes';
+import { INITIAL_BIKE_LISTINGS } from './src/data/marketplaceData';
 import { COLORS } from './src/theme/colors';
 
 class ErrorBoundary extends Component {
@@ -117,6 +118,14 @@ export default function App() {
     }, 4000);
   };
 
+  // Shared Marketplace State for listings submitted via "Rent Your Bike"
+  const [sharedBikes, setSharedBikes] = useState(INITIAL_BIKE_LISTINGS);
+
+  const handleBikeSubmitted = (newBike) => {
+    setSharedBikes((prev) => [newBike, ...prev]);
+    showToast(`Listing ${newBike.registrationNumber || newBike.model} queued for admin verification!`);
+  };
+
   const handleSelectBike = (bike) => {
     setSelectedBike(bike);
   };
@@ -185,6 +194,8 @@ export default function App() {
                 onStartBooking={handleStartBooking}
                 onOpenBookModal={handleOpenBookModal}
                 onShowToast={showToast}
+                sharedBikes={sharedBikes}
+                onBikeSubmitted={handleBikeSubmitted}
               />
 
               {/* Floating WhatsApp Quick Action Button */}

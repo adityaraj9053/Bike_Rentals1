@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
-import { Compass, User, ChevronLeft, Globe } from 'lucide-react-native';
+import { Compass, User, ChevronLeft, Globe, Sparkles, Shield } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -69,6 +69,27 @@ export default function CustomHeader({
         </View>
 
         <View style={[styles.headerRight, isMobile && styles.headerRightMobile]}>
+          {/* Rent Your Bike Navigation Button */}
+          <TouchableOpacity
+            style={[styles.rentBikeBtn, isVerySmall && styles.rentBikeBtnSmall]}
+            onPress={() => navigation?.navigate('RentBike')}
+            activeOpacity={0.8}
+          >
+            <Sparkles size={12} color="#FFFFFF" />
+            <Text style={styles.rentBikeBtnText}>{isMobile ? 'List Bike' : 'Rent Your Bike'}</Text>
+          </TouchableOpacity>
+
+          {/* Admin Dashboard Quick Access Button */}
+          <TouchableOpacity
+            style={[styles.adminHeaderBtn, isVerySmall && styles.adminHeaderBtnSmall]}
+            onPress={() => navigation?.navigate('AdminDashboard')}
+            activeOpacity={0.8}
+            accessibilityLabel="Admin Dashboard"
+          >
+            <Shield size={12} color="#38BDF8" />
+            <Text style={styles.adminHeaderText}>Admin</Text>
+          </TouchableOpacity>
+
           {/* Quick Book Action - Directly navigates to Fleet (Motorbikes) page */}
           <TouchableOpacity
             style={[styles.headerBookBtn, isVerySmall && styles.headerBookBtnSmall]}
@@ -179,6 +200,46 @@ const styles = StyleSheet.create({
   },
   headerRightMobile: {
     gap: 6,
+  },
+  rentBikeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(2, 132, 199, 0.2)',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+    paddingHorizontal: 12,
+    paddingVertical: 6.5,
+    borderRadius: RADIUS.full,
+  },
+  rentBikeBtnSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  rentBikeBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  adminHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  adminHeaderBtnSmall: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  adminHeaderText: {
+    color: '#CBD5E1',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   headerBookBtn: {
     backgroundColor: '#0284C7',
