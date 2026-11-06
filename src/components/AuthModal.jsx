@@ -18,6 +18,7 @@ import { X, ShieldCheck, Calendar, AlertTriangle, ArrowRight, ChevronDown, User,
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import PhoneInput from './PhoneInput';
+import CalendarPickerModal from './CalendarPickerModal';
 import { validateEmail, validatePhone } from '../utils/validation';
 import {
   GOOGLE_CLIENT_ID,
@@ -84,8 +85,14 @@ const MONTHS_HI = [
 ];
 
 const currentYear = new Date().getFullYear();
-// Rider years from currentYear - 100 up to currentYear - 16
-const YEARS = Array.from({ length: 75 }, (_, i) => String(currentYear - 16 - i));
+// Rider years strictly restricted to 18+ (currentYear - 18 down to currentYear - 90)
+const maxAllowedRiderYear = currentYear - 18;
+const YEARS = Array.from({ length: 75 }, (_, i) => String(maxAllowedRiderYear - i));
+
+// 18-year cutoff date for calendar selection
+const todayDate = new Date();
+const maxDobCutoff = new Date(todayDate.getFullYear() - 18, todayDate.getMonth(), todayDate.getDate());
+const maxDobDateStr = `${maxDobCutoff.getFullYear()}-${String(maxDobCutoff.getMonth() + 1).padStart(2, '0')}-${String(maxDobCutoff.getDate()).padStart(2, '0')}`;
 
 export default function AuthModal({
   visible,
@@ -106,6 +113,7 @@ export default function AuthModal({
   const [dobMonth, setDobMonth] = useState('');
   const [dobYear, setDobYear] = useState('');
   const [activeDobPicker, setActiveDobPicker] = useState(null); // 'day' | 'month' | 'year' | null
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -205,6 +213,7 @@ export default function AuthModal({
     setDobMonth('');
     setDobYear('');
     setActiveDobPicker(null);
+    setIsCalendarOpen(false);
     setOtp('');
     setOtpSent(false);
     setErrorMsg('');
@@ -415,12 +424,13 @@ export default function AuthModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
+    <>
+      <Modal
+        visible={visible}
+        animationType="fade"
+        transparent
+        onRequestClose={onClose}
+      >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
@@ -574,11 +584,61 @@ export default function AuthModal({
 
                         {activeTab === 'signup' && (
                           <View style={styles.inputGroup}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <Calendar size={14} color="#38BDF8" />
-                              <Text style={styles.inputLabel}>
-                                {t('auth.dob', 'DATE OF BIRTH (18+ MANDATORY)')}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Calendar size={14} color="#38BDF8" />
+                                <Text style={styles.inputLabel}>
+                                  {t('auth.dob', 'DATE OF BIRTH (18+ MANDATORY)')}
+                                </Text>
+                              </View>
+                              <View style={styles.strictAgePill}>
+                                <ShieldCheck size={11} color="#10B981" />
+                                <Text style={styles.strictAgePillText}>
+                                  {isHindi ? `18+ (जन्म वर्ष ≤ ${maxAllowedRiderYear})` : `18+ (Year ≤ ${maxAllowedRiderYear})`}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Dedicated Interactive 18+ Calendar Picker Button */}
+                            <TouchableOpacity
+                              style={[
+                                styles.calendarDobBtn,
+                                dobDay && dobMonth && dobYear && styles.calendarDobBtnSelected,
+                              ]}
+                              onPress={() => setIsCalendarOpen(true)}
+                              activeOpacity={0.8}
+                            >
+                              <View style={styles.calendarDobBtnLeft}>
+                                <View style={styles.calendarDobIconWrap}>
+                                  <Calendar size={18} color="#38BDF8" />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={dobDay && dobMonth && dobYear ? styles.calendarDobMainTextSelected : styles.calendarDobMainText}>
+                                    {dobDay && dobMonth && dobYear
+                                      ? `${dobDay} ${monthsList.find((m) => m.value === dobMonth)?.label?.split(' ')[0] || dobMonth} ${dobYear}`
+                                      : (isHindi ? 'कैलेंडर से जन्म तिथि चुनें' : 'Select Birth Date from Calendar')}
+                                  </Text>
+                                  <Text style={styles.calendarDobSubText}>
+                                    {dobDay && dobMonth && dobYear
+                                      ? `${calculateAge(dobDay, dobMonth, dobYear)} ${isHindi ? 'वर्ष (18+ सत्यापित)' : 'years old (18+ Verified)'}`
+                                      : (isHindi ? `केवल 18+ आयु वर्ग मान्य (अधिकतम जन्म वर्ष ${maxAllowedRiderYear})` : `Strictly 18+ only (Max birth year ${maxAllowedRiderYear})`)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.calendarDobActionPill}>
+                                <Text style={styles.calendarDobActionText}>
+                                  {isHindi ? 'कैलेंडर खोलें' : 'Open Calendar'}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+
+                            {/* Or choose using 3 quick dropdown selectors */}
+                            <View style={styles.orDividerRow}>
+                              <View style={styles.orDividerLine} />
+                              <Text style={styles.orDividerText}>
+                                {isHindi ? 'या दिन / माह / वर्ष चुनें' : 'or pick Day / Month / Year'}
                               </Text>
+                              <View style={styles.orDividerLine} />
                             </View>
 
                             {/* 3 Separate Dropdown Selectors for Day, Month, Year */}
@@ -607,7 +667,7 @@ export default function AuthModal({
                                 <ChevronDown size={14} color="#94A3B8" />
                               </TouchableOpacity>
 
-                              {/* Year Selector */}
+                              {/* Year Selector - strictly limited to 18+ years */}
                               <TouchableOpacity
                                 style={[styles.dobSelectBox, activeDobPicker === 'year' && styles.dobSelectBoxActive, { flex: 1.2 }]}
                                 onPress={() => setActiveDobPicker(activeDobPicker === 'year' ? null : 'year')}
@@ -789,6 +849,29 @@ export default function AuthModal({
         </View>
       </TouchableWithoutFeedback>
     </Modal>
+
+    {/* Interactive 18+ Date of Birth Calendar Picker Modal */}
+    <CalendarPickerModal
+      visible={isCalendarOpen}
+      onClose={() => setIsCalendarOpen(false)}
+      mode="past"
+      initialDate={dobYear && dobMonth && dobDay ? `${dobYear}-${dobMonth}-${dobDay}` : undefined}
+      maxDate={maxDobDateStr}
+      title={isHindi ? 'जन्म तिथि चुनें (18+ अनिवार्य)' : 'Select Date of Birth (18+ Mandatory)'}
+      onSelectDate={(dateStr) => {
+        if (dateStr) {
+          const parts = dateStr.split('-');
+          if (parts.length === 3) {
+            setDobYear(parts[0]);
+            setDobMonth(parts[1]);
+            setDobDay(parts[2]);
+            setErrorMsg('');
+          }
+        }
+        setIsCalendarOpen(false);
+      }}
+    />
+  </>
   );
 }
 
@@ -910,6 +993,96 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     color: COLORS.textPrimary,
     fontSize: 13.5,
+  },
+  strictAgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  strictAgePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#34D399',
+  },
+  calendarDobBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#111A2E',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  calendarDobBtnSelected: {
+    borderColor: '#38BDF8',
+    backgroundColor: 'rgba(2, 132, 199, 0.12)',
+  },
+  calendarDobBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  calendarDobIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDobMainText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  calendarDobMainTextSelected: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  calendarDobSubText: {
+    fontSize: 10.5,
+    color: '#38BDF8',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  calendarDobActionPill: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+  },
+  calendarDobActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  orDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 6,
+    gap: 8,
+  },
+  orDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  orDividerText: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   dobSelectorsRow: {
     flexDirection: 'row',

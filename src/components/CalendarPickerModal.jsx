@@ -14,6 +14,8 @@ import {
   Calendar as CalendarIcon,
   X,
   Check,
+  ShieldCheck,
+  ChevronDown,
 } from 'lucide-react-native';
 import { useLanguage } from '../i18n/LanguageContext';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
@@ -51,17 +53,36 @@ export default function CalendarPickerModal({
 
   const [currentMonth, setCurrentMonth] = useState(parseDate(initialDate));
   const [selectedDate, setSelectedDate] = useState(initialDate ? parseDate(initialDate) : null);
+  const [showYearPicker, setShowYearPicker] = useState(false);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // If in 'past' mode (e.g. Date of Birth) and maxDate not explicitly provided,
+  // enforce strict 18+ restriction (18 years ago from today)
+  const defaultPastMax = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+
+  const effectiveMin = minDate ? parseDate(minDate) : (mode === 'future' ? today : null);
+  if (effectiveMin) effectiveMin.setHours(0, 0, 0, 0);
+
+  const effectiveMax = maxDate ? parseDate(maxDate) : (mode === 'past' ? defaultPastMax : null);
+  if (effectiveMax) effectiveMax.setHours(23, 59, 59, 999);
+
+  const maxAllowedYear = effectiveMax ? effectiveMax.getFullYear() : today.getFullYear();
+  const minAllowedYear = 1930;
 
   useEffect(() => {
     if (visible) {
+      setShowYearPicker(false);
       if (initialDate) {
         const d = parseDate(initialDate);
         setSelectedDate(d);
         setCurrentMonth(d);
       } else {
         if (mode === 'past') {
-          // Default DOB view around 2000
-          const dobDef = new Date(2000, 0, 1);
+          // Default DOB view around 2000 (or maxAllowedYear if earlier)
+          const defaultYear = Math.min(2000, maxAllowedYear);
+          const dobDef = new Date(defaultYear, 0, 1);
           setCurrentMonth(dobDef);
           setSelectedDate(null);
         } else {
@@ -71,7 +92,7 @@ export default function CalendarPickerModal({
         }
       }
     }
-  }, [visible, initialDate, mode]);
+  }, [visible, initialDate, mode, maxAllowedYear]);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth(); // 0 to 11
@@ -90,35 +111,54 @@ export default function CalendarPickerModal({
   const monthNames = isHindi ? monthsHi : monthsEn;
   const weekdays = isHindi ? weekdaysHi : weekdaysEn;
 
+  // Strict boundary checks to prevent navigating to underage birth years
+  const isNextMonthDisabled = Boolean(
+    effectiveMax && (
+      year > effectiveMax.getFullYear() ||
+      (year === effectiveMax.getFullYear() && month >= effectiveMax.getMonth())
+    )
+  );
+
+  const isNextYearDisabled = Boolean(
+    effectiveMax && (year >= effectiveMax.getFullYear())
+  );
+
+  const isNext5YearsDisabled = Boolean(
+    effectiveMax && (year >= effectiveMax.getFullYear())
+  );
+
   // Navigation handlers
   const handlePrevMonth = () => {
     setCurrentMonth(new Date(year, month - 1, 1));
   };
 
   const handleNextMonth = () => {
+    if (isNextMonthDisabled) return;
     setCurrentMonth(new Date(year, month + 1, 1));
   };
 
   const handlePrevYear = () => {
-    setCurrentMonth(new Date(year - 1, month, 1));
+    setCurrentMonth(new Date(Math.max(year - 1, minAllowedYear), month, 1));
   };
 
   const handleNextYear = () => {
+    if (isNextYearDisabled) return;
     setCurrentMonth(new Date(year + 1, month, 1));
+  };
+
+  const handlePrev5Years = () => {
+    setCurrentMonth(new Date(Math.max(year - 5, minAllowedYear), month, 1));
+  };
+
+  const handleNext5Years = () => {
+    if (isNext5YearsDisabled) return;
+    const targetYear = Math.min(year + 5, maxAllowedYear);
+    setCurrentMonth(new Date(targetYear, month, 1));
   };
 
   // Date math
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const effectiveMin = minDate ? parseDate(minDate) : (mode === 'future' ? today : null);
-  if (effectiveMin) effectiveMin.setHours(0, 0, 0, 0);
-
-  const effectiveMax = maxDate ? parseDate(maxDate) : (mode === 'past' ? today : null);
-  if (effectiveMax) effectiveMax.setHours(23, 59, 59, 999);
 
   const isDayDisabled = (dayNum) => {
     const d = new Date(year, month, dayNum);
@@ -258,12 +298,24 @@ export default function CalendarPickerModal({
             </View>
           )}
 
+          {/* 18+ Age Restriction Header Banner */}
+          {mode === 'past' && (
+            <View style={styles.ageBanner}>
+              <ShieldCheck size={14} color="#10B981" />
+              <Text style={styles.ageBannerText}>
+                {isHindi
+                  ? `18+ अनिवार्य: केवल ${maxAllowedYear} या उससे पहले जन्मे व्यक्ति पात्र हैं`
+                  : `18+ Mandatory: Restricted to riders born in ${maxAllowedYear} or earlier`}
+              </Text>
+            </View>
+          )}
+
           {/* Quick Year Shift for Birth Date Mode */}
           {mode === 'past' && (
             <View style={styles.yearShiftRow}>
               <TouchableOpacity
                 style={styles.yearShiftBtn}
-                onPress={() => setCurrentMonth(new Date(year - 5, month, 1))}
+                onPress={handlePrev5Years}
                 activeOpacity={0.8}
               >
                 <Text style={styles.yearShiftText}>-5 Yrs</Text>
@@ -275,90 +327,145 @@ export default function CalendarPickerModal({
               >
                 <Text style={styles.yearShiftText}>-1 Yr</Text>
               </TouchableOpacity>
-              <Text style={styles.yearDisplayBadge}>{year}</Text>
+
               <TouchableOpacity
-                style={styles.yearShiftBtn}
-                onPress={handleNextYear}
+                style={styles.yearBadgeBtn}
+                onPress={() => setShowYearPicker(!showYearPicker)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.yearShiftText}>+1 Yr</Text>
+                <Text style={styles.yearDisplayBadge}>{year}</Text>
+                <ChevronDown size={13} color="#38BDF8" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.yearShiftBtn, isNextYearDisabled && styles.yearShiftBtnDisabled]}
+                onPress={handleNextYear}
+                disabled={isNextYearDisabled}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.yearShiftText, isNextYearDisabled && styles.yearShiftTextDisabled]}>+1 Yr</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.yearShiftBtn}
-                onPress={() => setCurrentMonth(new Date(year + 5, month, 1))}
+                style={[styles.yearShiftBtn, isNext5YearsDisabled && styles.yearShiftBtnDisabled]}
+                onPress={handleNext5Years}
+                disabled={isNext5YearsDisabled}
                 activeOpacity={0.8}
               >
-                <Text style={styles.yearShiftText}>+5 Yrs</Text>
+                <Text style={[styles.yearShiftText, isNext5YearsDisabled && styles.yearShiftTextDisabled]}>+5 Yrs</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Month / Year Navigator Bar */}
-          <View style={styles.monthNavRow}>
-            <TouchableOpacity
-              style={styles.navArrowBtn}
-              onPress={handlePrevMonth}
-              activeOpacity={0.7}
-            >
-              <ChevronLeft size={18} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <Text style={styles.monthYearTitle}>
-              {monthNames[month]} {year}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.navArrowBtn}
-              onPress={handleNextMonth}
-              activeOpacity={0.7}
-            >
-              <ChevronRight size={18} color="#CBD5E1" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Weekday Labels */}
-          <View style={styles.weekdaysRow}>
-            {weekdays.map((w, idx) => (
-              <Text key={idx} style={styles.weekdayLabel}>
-                {w}
-              </Text>
-            ))}
-          </View>
-
-          {/* Calendar Grid */}
-          <View style={styles.gridContainer}>
-            {slots.map((slot) => {
-              if (slot.empty) {
-                return <View key={slot.id} style={styles.daySlotEmpty} />;
-              }
-
-              return (
-                <TouchableOpacity
-                  key={slot.id}
-                  style={[
-                    styles.daySlot,
-                    slot.selected && styles.daySlotSelected,
-                    slot.isToday && !slot.selected && styles.daySlotToday,
-                    slot.disabled && styles.daySlotDisabled,
-                  ]}
-                  onPress={() => handleSelectDay(slot.day)}
-                  disabled={slot.disabled}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      slot.selected && styles.dayTextSelected,
-                      slot.isToday && !slot.selected && styles.dayTextToday,
-                      slot.disabled && styles.dayTextDisabled,
-                    ]}
-                  >
-                    {slot.day}
-                  </Text>
+          {/* Direct Year Picker View (when toggled in past mode) */}
+          {showYearPicker && mode === 'past' ? (
+            <View style={styles.yearPickerContainer}>
+              <View style={styles.yearPickerHeader}>
+                <Text style={styles.yearPickerTitle}>
+                  {isHindi ? `जन्म वर्ष चुनें (अधिकतम ${maxAllowedYear})` : `Select Birth Year (Max ${maxAllowedYear})`}
+                </Text>
+                <TouchableOpacity onPress={() => setShowYearPicker(false)}>
+                  <X size={15} color="#94A3B8" />
                 </TouchableOpacity>
-              );
-            })}
-          </View>
+              </View>
+              <ScrollView
+                style={{ maxHeight: 210 }}
+                contentContainerStyle={styles.yearGridWrap}
+                showsVerticalScrollIndicator={true}
+              >
+                {Array.from({ length: maxAllowedYear - minAllowedYear + 1 }, (_, i) => maxAllowedYear - i).map((y) => (
+                  <TouchableOpacity
+                    key={y}
+                    style={[styles.yearChip, year === y && styles.yearChipActive]}
+                    onPress={() => {
+                      setCurrentMonth(new Date(y, month, 1));
+                      setShowYearPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.yearChipText, year === y && styles.yearChipTextActive]}>
+                      {y}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : (
+            <>
+              {/* Month / Year Navigator Bar */}
+              <View style={styles.monthNavRow}>
+                <TouchableOpacity
+                  style={styles.navArrowBtn}
+                  onPress={handlePrevMonth}
+                  activeOpacity={0.7}
+                >
+                  <ChevronLeft size={18} color="#CBD5E1" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => mode === 'past' && setShowYearPicker(true)}
+                  activeOpacity={mode === 'past' ? 0.7 : 1}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={styles.monthYearTitle}>
+                    {monthNames[month]} {year}
+                  </Text>
+                  {mode === 'past' && <ChevronDown size={14} color="#38BDF8" />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.navArrowBtn, isNextMonthDisabled && styles.navArrowBtnDisabled]}
+                  onPress={handleNextMonth}
+                  disabled={isNextMonthDisabled}
+                  activeOpacity={0.7}
+                >
+                  <ChevronRight size={18} color={isNextMonthDisabled ? '#475569' : '#CBD5E1'} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Weekday Labels */}
+              <View style={styles.weekdaysRow}>
+                {weekdays.map((w, idx) => (
+                  <Text key={idx} style={styles.weekdayLabel}>
+                    {w}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Calendar Grid */}
+              <View style={styles.gridContainer}>
+                {slots.map((slot) => {
+                  if (slot.empty) {
+                    return <View key={slot.id} style={styles.daySlotEmpty} />;
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={slot.id}
+                      style={[
+                        styles.daySlot,
+                        slot.selected && styles.daySlotSelected,
+                        slot.isToday && !slot.selected && styles.daySlotToday,
+                        slot.disabled && styles.daySlotDisabled,
+                      ]}
+                      onPress={() => handleSelectDay(slot.day)}
+                      disabled={slot.disabled}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          slot.selected && styles.dayTextSelected,
+                          slot.isToday && !slot.selected && styles.dayTextToday,
+                          slot.disabled && styles.dayTextDisabled,
+                        ]}
+                      >
+                        {slot.day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
           {/* Selected Date Summary & Confirm Button */}
           <View style={styles.footerRow}>
@@ -480,21 +587,110 @@ const styles = StyleSheet.create({
     padding: 6,
     marginBottom: 10,
   },
+  ageBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  ageBannerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#34D399',
+    flex: 1,
+  },
+  yearBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
   yearShiftBtn: {
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: RADIUS.sm,
   },
+  yearShiftBtnDisabled: {
+    opacity: 0.25,
+  },
   yearShiftText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#94A3B8',
   },
+  yearShiftTextDisabled: {
+    color: '#475569',
+  },
   yearDisplayBadge: {
     fontSize: 13,
     fontWeight: '800',
     color: '#38BDF8',
+  },
+  yearPickerContainer: {
+    backgroundColor: '#0F172A',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.2)',
+    padding: 10,
+    marginBottom: 12,
+  },
+  yearPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 8,
+  },
+  yearPickerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#38BDF8',
+  },
+  yearGridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  yearChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    minWidth: 54,
+    alignItems: 'center',
+  },
+  yearChipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#38BDF8',
+  },
+  yearChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#CBD5E1',
+  },
+  yearChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  navArrowBtnDisabled: {
+    opacity: 0.25,
   },
   monthNavRow: {
     flexDirection: 'row',
