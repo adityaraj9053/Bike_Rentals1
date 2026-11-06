@@ -23,8 +23,10 @@ import {
   ArrowLeft,
   X,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
+import { useLanguage } from '../i18n/LanguageContext';
 import StepOwnerInfo from '../components/rentBike/StepOwnerInfo';
 import StepBikeInfo from '../components/rentBike/StepBikeInfo';
 import StepDocSubmission from '../components/rentBike/StepDocSubmission';
@@ -44,6 +46,66 @@ const STEPS = [
 
 const INITIAL_FORM_DATA = {
   // Step 1: Owner
+  fullName: '',
+  phone: '',
+  countryCode: '+91',
+  mobileVerified: false,
+  email: '',
+  emailVerified: false,
+  address: '',
+  city: '',
+  state: '',
+  pincode: '',
+  idDocument: null,
+
+  // Step 2: Bike
+  brand: '',
+  model: '',
+  manufacturingYear: '',
+  registrationNumber: '',
+  category: '',
+  engineCapacity: '',
+  fuelType: 'Petrol',
+  transmission: 'Manual',
+  colour: '',
+  description: '',
+  images: {
+    front: null,
+    rear: null,
+    left: null,
+    right: null,
+  },
+
+  // Step 3: Documents
+  documents: {
+    rc: null,
+    insurance: null,
+    puc: null,
+  },
+  insurancePolicyNumber: '',
+  insuranceExpiryDate: '',
+  pucExpiryDate: '',
+  chassisNumber: '',
+  engineNumber: '',
+  registeredOwnerName: '',
+  ownershipType: 'registered_owner', // 'registered_owner' | 'authorized_representative'
+
+  // Step 4: Rental
+  dailyPrice: '',
+  securityDeposit: '',
+  minDuration: 1,
+  maxDuration: 14,
+  availabilityPreset: 'Next 30 Days',
+  availableFrom: 'Immediate',
+  availableTo: '+30 Days',
+  pickupLocation: '',
+  pickupAddress: '',
+  pickupTimings: '07:00 AM - 09:00 PM',
+  deliveryAvailable: false,
+  rulesList: [],
+};
+
+const SAMPLE_DEMO_DATA = {
   fullName: 'Vikram Malhotra',
   phone: '9820144521',
   countryCode: '+91',
@@ -61,8 +123,6 @@ const INITIAL_FORM_DATA = {
     uploadedAt: '2026-11-06',
     verificationState: 'Uploaded - Awaiting Manual Admin Review',
   },
-
-  // Step 2: Bike
   brand: 'Royal Enfield',
   model: 'Himalayan 450',
   manufacturingYear: '2024',
@@ -72,34 +132,17 @@ const INITIAL_FORM_DATA = {
   fuelType: 'Petrol',
   transmission: 'Manual',
   colour: 'Kamet White',
-  description: 'Fully serviced Himalayan 450 with touring screen, engine guards, and hard pannier stays. Ideal for highway cruising and weekend getaways.',
+  description: 'Fully serviced Himalayan 450 with touring screen, engine guards, and hard pannier stays.',
   images: {
     front: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
     rear: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=800&auto=format&fit=crop&q=80',
     left: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=800&auto=format&fit=crop&q=80',
     right: 'https://images.unsplash.com/photo-1558980664-769d59546b3d?w=800&auto=format&fit=crop&q=80',
   },
-
-  // Step 3: Documents
   documents: {
-    rc: {
-      fileName: 'MH02FJ9042_RC_SmartCard.pdf',
-      fileSize: '1.8 MB',
-      uploadedAt: '06 Nov 2026',
-      status: 'Simulated Upload - Pending Verifier Check',
-    },
-    insurance: {
-      fileName: 'ICICI_Lombard_Comprehensive_Policy.pdf',
-      fileSize: '2.4 MB',
-      uploadedAt: '06 Nov 2026',
-      status: 'Simulated Upload - Pending Verifier Check',
-    },
-    puc: {
-      fileName: 'PUCC_Valid_Certificate.pdf',
-      fileSize: '650 KB',
-      uploadedAt: '06 Nov 2026',
-      status: 'Simulated Upload - Pending Verifier Check',
-    },
+    rc: { fileName: 'MH02FJ9042_RC_SmartCard.pdf', fileSize: '1.8 MB', uploadedAt: '06 Nov 2026', status: 'Simulated Upload - Pending Verifier Check' },
+    insurance: { fileName: 'ICICI_Lombard_Comprehensive_Policy.pdf', fileSize: '2.4 MB', uploadedAt: '06 Nov 2026', status: 'Simulated Upload - Pending Verifier Check' },
+    puc: { fileName: 'PUCC_Valid_Certificate.pdf', fileSize: '650 KB', uploadedAt: '06 Nov 2026', status: 'Simulated Upload - Pending Verifier Check' },
   },
   insurancePolicyNumber: '3005/2024/9812401',
   insuranceExpiryDate: '2027-05-18',
@@ -107,9 +150,7 @@ const INITIAL_FORM_DATA = {
   chassisNumber: 'ME3H450XXXX88291',
   engineNumber: 'H450E882910',
   registeredOwnerName: 'Vikram Malhotra',
-  ownershipType: 'registered_owner', // 'registered_owner' | 'authorized_representative'
-
-  // Step 4: Rental
+  ownershipType: 'registered_owner',
   dailyPrice: 1600,
   securityDeposit: 3500,
   minDuration: 1,
@@ -131,15 +172,51 @@ const INITIAL_FORM_DATA = {
 
 export default function RentBikeScreen({
   navigation,
+  user,
+  onOpenAuth,
   onShowToast,
   onBikeSubmitted,
 }) {
+  const { t, isHindi, toggleLanguage } = useLanguage();
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+
+  const STEPS = [
+    { id: 0, title: t('rentBike.step0', 'Owner Info'), icon: User, short: 'Owner' },
+    { id: 1, title: t('rentBike.step1', 'Bike Info'), icon: Bike, short: 'Bike' },
+    { id: 2, title: t('rentBike.step2', 'Documents'), icon: FileText, short: 'Docs' },
+    { id: 3, title: t('rentBike.step3', 'Rental Info'), icon: IndianRupee, short: 'Rental' },
+    { id: 4, title: t('rentBike.step4', 'Review & Submit'), icon: CheckCircle2, short: 'Review' },
+  ];
+  const [formData, setFormData] = useState(() => ({
+    ...INITIAL_FORM_DATA,
+    fullName: user?.name || INITIAL_FORM_DATA.fullName,
+    email: user?.email || INITIAL_FORM_DATA.email,
+    emailVerified: user?.email ? true : INITIAL_FORM_DATA.emailVerified,
+    phone: user?.phone || INITIAL_FORM_DATA.phone,
+    countryCode: user?.countryCode || INITIAL_FORM_DATA.countryCode || '+91',
+    mobileVerified: user?.phone ? true : INITIAL_FORM_DATA.mobileVerified,
+    registeredOwnerName: user?.name || INITIAL_FORM_DATA.registeredOwnerName,
+  }));
   const [stepErrors, setStepErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // Synchronize when authenticated user changes or logs in
+  React.useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: user.name || prev.fullName,
+        email: user.email || prev.email,
+        emailVerified: user.email ? true : prev.emailVerified,
+        phone: user.phone || prev.phone,
+        countryCode: user.countryCode || prev.countryCode || '+91',
+        mobileVerified: user.phone ? true : prev.mobileVerified,
+        registeredOwnerName: user.name || prev.registeredOwnerName,
+      }));
+    }
+  }, [user]);
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({
@@ -152,6 +229,21 @@ export default function RentBikeScreen({
         delete next[field];
         return next;
       });
+    }
+  };
+
+  const handleFillSampleData = () => {
+    setFormData((prev) => ({
+      ...SAMPLE_DEMO_DATA,
+      fullName: user?.name || SAMPLE_DEMO_DATA.fullName,
+      email: user?.email || SAMPLE_DEMO_DATA.email,
+      phone: user?.phone || SAMPLE_DEMO_DATA.phone,
+      countryCode: user?.countryCode || SAMPLE_DEMO_DATA.countryCode,
+      registeredOwnerName: user?.name || SAMPLE_DEMO_DATA.registeredOwnerName,
+    }));
+    setStepErrors({});
+    if (onShowToast) {
+      onShowToast('Sample bike & owner data loaded for quick testing!');
     }
   };
 
@@ -310,18 +402,29 @@ export default function RentBikeScreen({
         </TouchableOpacity>
 
         <View style={styles.topBarCenter}>
-          <Text style={styles.topBarTitle}>Rent Your Bike</Text>
-          <Text style={styles.topBarSubtitle}>Owner Listing Portal</Text>
+          <Text style={styles.topBarTitle}>{t('rentBike.portalTitle', 'Rent Your Bike')}</Text>
+          <Text style={styles.topBarSubtitle}>{t('rentBike.portalSubtitle', 'Owner Listing Portal')}</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={handleCloseOrExit}
-          activeOpacity={0.7}
-          accessibilityLabel="Exit form"
-        >
-          <X size={18} color={COLORS.textMuted} />
-        </TouchableOpacity>
+        <View style={styles.topBarRight}>
+          <TouchableOpacity
+            style={styles.langToggleBtn}
+            onPress={toggleLanguage}
+            activeOpacity={0.8}
+            accessibilityLabel="Switch Language"
+          >
+            <Text style={styles.langToggleBtnText}>{isHindi ? 'English' : 'हिन्दी'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={handleCloseOrExit}
+            activeOpacity={0.7}
+            accessibilityLabel="Exit form"
+          >
+            <X size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -332,17 +435,48 @@ export default function RentBikeScreen({
         <View style={styles.pageContainer}>
           {/* Hero Banner Section */}
           <View style={styles.pageHero}>
-            <View style={styles.heroBadge}>
-              <Bike size={14} color="#38BDF8" />
-              <Text style={styles.heroBadgeText}>OWNER ONBOARDING</Text>
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroBadge}>
+                <Bike size={14} color="#38BDF8" />
+                <Text style={styles.heroBadgeText}>{t('rentBike.badge', 'OWNER ONBOARDING')}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.demoFillBtn}
+                onPress={handleFillSampleData}
+                activeOpacity={0.7}
+              >
+                <Sparkles size={13} color="#38BDF8" />
+                <Text style={styles.demoFillBtnText}>{t('rentBike.demoDataBtn', 'Load Sample Demo Data')}</Text>
+              </TouchableOpacity>
             </View>
             <Text style={styles.heroHeading}>
-              Rent Your Bike – Turn Your Bike into an Earning Opportunity
+              {t('rentBike.heroHeading', 'Rent Your Bike – Turn Your Bike into an Earning Opportunity')}
             </Text>
             <Text style={styles.heroSubheading}>
-              List your bike, connect with potential renters, and earn by sharing your vehicle with verified riders.
+              {t('rentBike.heroSubheading', 'List your bike, connect with potential renters, and earn by sharing your vehicle with verified riders.')}
             </Text>
           </View>
+
+          {/* Authentication Alert if user not logged in */}
+          {!user && (
+            <View style={styles.unauthBanner}>
+              <View style={styles.unauthBannerLeft}>
+                <AlertTriangle size={18} color="#F59E0B" />
+                <Text style={styles.unauthBannerText}>
+                  {t('rentBike.unauthAlert', 'You are not logged in. Sign in to link this bike directly to your owner dashboard.')}
+                </Text>
+              </View>
+              {onOpenAuth && (
+                <TouchableOpacity
+                  style={styles.unauthBannerBtn}
+                  onPress={onOpenAuth}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.unauthBannerBtnText}>{t('rentBike.loginRegister', 'Log In / Register')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Stepper Progress Bar */}
           <View style={styles.stepperContainer}>
@@ -407,6 +541,8 @@ export default function RentBikeScreen({
             {currentStep === 0 && (
               <StepOwnerInfo
                 data={formData}
+                user={user}
+                onOpenAuth={onOpenAuth}
                 onChange={handleFieldChange}
                 errors={stepErrors}
                 onShowToast={onShowToast}
@@ -460,7 +596,7 @@ export default function RentBikeScreen({
                     activeOpacity={0.8}
                   >
                     <ChevronLeft size={16} color="#FFFFFF" />
-                    <Text style={styles.navPrevBtnText}>Previous</Text>
+                    <Text style={styles.navPrevBtnText}>{t('rentBike.prevBtn', 'Previous')}</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={{ width: 10 }} />
@@ -472,7 +608,7 @@ export default function RentBikeScreen({
                   activeOpacity={0.8}
                 >
                   <Text style={styles.navNextBtnText}>
-                    Continue to {STEPS[currentStep + 1]?.title || 'Next'}
+                    {t('rentBike.continueTo', 'Continue to')} {STEPS[currentStep + 1]?.title || 'Next'}
                   </Text>
                   <ChevronRight size={16} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -494,9 +630,9 @@ export default function RentBikeScreen({
             <View style={styles.exitIconWrap}>
               <AlertTriangle size={28} color="#F59E0B" />
             </View>
-            <Text style={styles.exitModalTitle}>Discard Incomplete Listing?</Text>
+            <Text style={styles.exitModalTitle}>{t('rentBike.exitTitle', 'Discard Incomplete Listing?')}</Text>
             <Text style={styles.exitModalSub}>
-              You have unsaved vehicle specifications and uploaded documents. Leaving now will reset your progress.
+              {t('rentBike.exitSub', 'You have unsaved vehicle specifications and uploaded documents. Leaving now will reset your progress.')}
             </Text>
 
             <View style={styles.exitModalActions}>
@@ -505,7 +641,7 @@ export default function RentBikeScreen({
                 onPress={() => setShowExitConfirm(false)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.exitCancelText}>Keep Editing</Text>
+                <Text style={styles.exitCancelText}>{t('rentBike.keepEditing', 'Keep Editing')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -516,7 +652,7 @@ export default function RentBikeScreen({
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.exitDiscardText}>Discard & Exit</Text>
+                <Text style={styles.exitDiscardText}>{t('rentBike.discardExit', 'Discard & Exit')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -584,6 +720,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textMuted,
   },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  langToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  langToggleBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#38BDF8',
+  },
   closeBtn: {
     width: 36,
     height: 36,
@@ -608,6 +762,30 @@ const styles = StyleSheet.create({
     marginBottom: 26,
     textAlign: 'center',
   },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  demoFillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+  },
+  demoFillBtnText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,7 +796,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: RADIUS.full,
-    marginBottom: 12,
   },
   heroBadgeText: {
     color: '#38BDF8',
@@ -837,6 +1014,44 @@ const styles = StyleSheet.create({
   exitDiscardText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  unauthBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  unauthBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 240,
+  },
+  unauthBannerText: {
+    color: '#FEF3C7',
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+  },
+  unauthBannerBtn: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+  },
+  unauthBannerBtnText: {
+    color: '#000000',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

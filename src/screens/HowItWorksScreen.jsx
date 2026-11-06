@@ -18,8 +18,37 @@ import {
 } from 'lucide-react-native';
 import { FAQS_DATA } from '../data/bikes';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
+import { useLanguage } from '../i18n/LanguageContext';
+
+const HINDI_FAQS = [
+  {
+    question: 'मैं बाइक कैसे किराए पर ले सकता हूँ?',
+    answer: 'किराए पर लेना बहुत आसान है! हमारी फ्लीट ब्राउज़ करें, बाइक चुनें, किराये की तारीखें तय करें और विवरण सबमिट करें। आप व्हाट्सएप या ऑनलाइन तुरंत पुष्टि कर सकते हैं।',
+  },
+  {
+    question: 'किन दस्तावेज़ों की आवश्यकता है?',
+    answer: 'आपको चाहिए: 1) मूल वैध ड्राइविंग लाइसेंस (दोपहिया वाहन हेतु), 2) सरकार द्वारा जारी पहचान पत्र (आधार, पासपोर्ट या वोटर आईडी), और 3) पासपोर्ट आकार का फ़ोटो या तत्काल सेल्फी सत्यापन।',
+  },
+  {
+    question: 'क्या ड्राइविंग लाइसेंस अनिवार्य है?',
+    answer: 'हाँ, कानून के अनुसार वैध दोपहिया ड्राइविंग लाइसेंस होना अनिवार्य है। लर्नर लाइसेंस या एक्सपायर हो चुके लाइसेंस स्वीकार नहीं किए जाते हैं।',
+  },
+  {
+    question: 'क्या सिक्योरिटी डिपॉजिट आवश्यक है?',
+    answer: 'हाँ, पिकअप के समय ₹1,500 से ₹5,000 (बाइक श्रेणी के अनुसार) की पूर्णतः वापसी योग्य सुरक्षा जमा राशि ली जाती है, जो वाहन वापसी निरीक्षण के 24-48 घंटों के भीतर 100% वापस कर दी जाती है।',
+  },
+  {
+    question: 'क्या रेंटल के साथ हेलमेट दिया जाता है?',
+    answer: 'हाँ! हर रेंटल के साथ एक स्वच्छ, प्रमाणित ISI/DOT हेलमेट निःशुल्क दिया जाता है। पीछे बैठने वाले साथी के लिए ₹50/दिन के मामूली शुल्क पर अतिरिक्त हेलमेट उपलब्ध है।',
+  },
+  {
+    question: 'आपकी ईंधन (फ्यूल) नीति क्या है?',
+    answer: 'हम \'समान-से-समान\' (Same-to-Same) ईंधन नीति का पालन करते हैं। पिकअप के समय जितना ईंधन था, वापसी के समय उतना ही ईंधन होना चाहिए।',
+  },
+];
 
 export default function HowItWorksScreen({ navigation }) {
+  const { t, isHindi } = useLanguage();
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
   const toggleFaq = (idx) => {
@@ -28,26 +57,28 @@ export default function HowItWorksScreen({ navigation }) {
 
   const steps = [
     {
-      num: '01',
-      title: 'Explore Our Fleet',
-      desc: 'Browse our diverse lineup of scooters, daily commuters, highway cruisers, and track-ready superbikes.',
+      num: t('guide.step1Num', '01'),
+      title: t('guide.step1Title', 'Explore Our Fleet'),
+      desc: t('guide.step1Desc', 'Browse our diverse lineup of scooters, daily commuters, highway cruisers, and track-ready superbikes.'),
     },
     {
-      num: '02',
-      title: 'Select Your Machine',
-      desc: 'Review detailed factory specifications, real photographs, verified rider reviews, and transparent daily rates.',
+      num: t('guide.step2Num', '02'),
+      title: t('guide.step2Title', 'Select Your Machine'),
+      desc: t('guide.step2Desc', 'Review detailed factory specifications, real photographs, verified rider reviews, and transparent daily rates.'),
     },
     {
-      num: '03',
-      title: 'Choose Dates & Enquire',
-      desc: 'Enquire directly via WhatsApp or book online. Select your preferred pickup dates, time, and hub location.',
+      num: t('guide.step3Num', '03'),
+      title: t('guide.step3Title', 'Choose Dates & Enquire'),
+      desc: t('guide.step3Desc', 'Enquire directly via WhatsApp or book online. Select your preferred pickup dates, time, and hub location.'),
     },
     {
-      num: '04',
-      title: 'Confirm & Ride',
-      desc: 'Present your driving licence and ID at our pickup hub, perform a 2-minute vehicle inspection, and hit the open road!',
+      num: t('guide.step4Num', '04'),
+      title: t('guide.step4Title', 'Confirm & Ride'),
+      desc: t('guide.step4Desc', 'Present your driving licence and ID at our pickup hub, perform a 2-minute vehicle inspection, and hit the open road!'),
     },
   ];
+
+  const currentFaqs = isHindi ? HINDI_FAQS : FAQS_DATA;
 
   return (
     <ScrollView
@@ -58,10 +89,10 @@ export default function HowItWorksScreen({ navigation }) {
       <View style={styles.centerContainer}>
         {/* Header Title */}
         <View style={styles.header}>
-          <Text style={styles.pretitle}>HOW RENTAL WORKS</Text>
-          <Text style={styles.title}>Simple 4-Step Process</Text>
+          <Text style={styles.pretitle}>{t('guide.pretitle', 'HOW RENTAL WORKS')}</Text>
+          <Text style={styles.title}>{t('guide.title', 'Simple 4-Step Process')}</Text>
           <Text style={styles.subtitle}>
-            From booking your machine to returning it after your road trip, we make motorcycle rental completely effortless, transparent, and safe.
+            {t('guide.subtitle', 'From booking your machine to returning it after your road trip, we make motorcycle rental completely effortless, transparent, and safe.')}
           </Text>
         </View>
 
@@ -82,8 +113,8 @@ export default function HowItWorksScreen({ navigation }) {
 
         {/* Essential Guidelines Card */}
         <View style={styles.guidelinesCard}>
-          <Text style={styles.guidelinesPretitle}>ESSENTIAL GUIDELINES</Text>
-          <Text style={styles.guidelinesTitle}>What You Need to Know</Text>
+          <Text style={styles.guidelinesPretitle}>{t('guide.guidelinesPretitle', 'ESSENTIAL GUIDELINES')}</Text>
+          <Text style={styles.guidelinesTitle}>{t('guide.guidelinesTitle', 'What You Need to Know')}</Text>
 
           <View style={styles.guidelinesGrid}>
             <View style={styles.guidelineItem}>
@@ -91,9 +122,9 @@ export default function HowItWorksScreen({ navigation }) {
                 <FileText size={20} color={COLORS.accentCyan} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.guidelineHeading}>Required Documents</Text>
+                <Text style={styles.guidelineHeading}>{t('guide.docsTitle', 'Required Documents')}</Text>
                 <Text style={styles.guidelineText}>
-                  Valid original Driving License (A-category for motorcycles), Aadhaar Card or Passport, and 2 passport photos.
+                  {t('guide.docsDesc', 'Valid original Driving License (A-category for motorcycles), Aadhaar Card or Passport, and 2 passport photos.')}
                 </Text>
               </View>
             </View>
@@ -103,9 +134,9 @@ export default function HowItWorksScreen({ navigation }) {
                 <ShieldCheck size={20} color={COLORS.accentCyan} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.guidelineHeading}>Security Deposit</Text>
+                <Text style={styles.guidelineHeading}>{t('guide.depositTitle', 'Security Deposit')}</Text>
                 <Text style={styles.guidelineText}>
-                  A 100% refundable security deposit is held during the ride and credited back within 24-48 hours post return inspection.
+                  {t('guide.depositDesc', 'A 100% refundable security deposit is held during the ride and credited back within 24-48 hours post return inspection.')}
                 </Text>
               </View>
             </View>
@@ -115,9 +146,9 @@ export default function HowItWorksScreen({ navigation }) {
                 <Clock size={20} color={COLORS.accentCyan} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.guidelineHeading}>24-Hour Rental Clock</Text>
+                <Text style={styles.guidelineHeading}>{t('guide.clockTitle', '24-Hour Rental Clock')}</Text>
                 <Text style={styles.guidelineText}>
-                  Rentals operate on a strict 24-hour cycle. Picking up at 10:00 AM means return by 10:00 AM the next day.
+                  {t('guide.clockDesc', 'Rentals operate on a strict 24-hour cycle. Picking up at 10:00 AM means return by 10:00 AM the next day.')}
                 </Text>
               </View>
             </View>
@@ -127,9 +158,9 @@ export default function HowItWorksScreen({ navigation }) {
                 <Fuel size={20} color={COLORS.accentCyan} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.guidelineHeading}>Fuel Policy</Text>
+                <Text style={styles.guidelineHeading}>{t('guide.fuelTitle', 'Fuel Policy')}</Text>
                 <Text style={styles.guidelineText}>
-                  Vehicle is provided with sufficient reserve fuel and must be returned at the same or higher fuel level.
+                  {t('guide.fuelDesc', 'Vehicle is provided with sufficient reserve fuel and must be returned at the same or higher fuel level.')}
                 </Text>
               </View>
             </View>
@@ -138,11 +169,11 @@ export default function HowItWorksScreen({ navigation }) {
 
         {/* FAQs */}
         <View style={styles.faqSection}>
-          <Text style={styles.faqPretitle}>FREQUENT QUESTIONS</Text>
-          <Text style={styles.faqTitle}>Rental FAQs</Text>
+          <Text style={styles.faqPretitle}>{t('guide.faqPretitle', 'FREQUENT QUESTIONS')}</Text>
+          <Text style={styles.faqTitle}>{t('guide.faqTitle', 'Rental FAQs')}</Text>
 
           <View style={styles.faqList}>
-            {FAQS_DATA.map((faq, index) => {
+            {currentFaqs.map((faq, index) => {
               const isOpen = openFaqIndex === index;
               return (
                 <TouchableOpacity
@@ -179,7 +210,7 @@ export default function HowItWorksScreen({ navigation }) {
             activeOpacity={0.8}
           >
             <Bike size={18} color="#FFFFFF" />
-            <Text style={styles.ctaBtnText}>Browse Available Fleet</Text>
+            <Text style={styles.ctaBtnText}>{t('guide.browseFleet', 'Browse Available Fleet')}</Text>
             <ArrowRight size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </View>

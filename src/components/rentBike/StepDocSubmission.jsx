@@ -24,6 +24,7 @@ import {
   UserCheck,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export default function StepDocSubmission({
   data,
@@ -31,6 +32,7 @@ export default function StepDocSubmission({
   errors,
   onShowToast,
 }) {
+  const { t, isHindi } = useLanguage();
   const [activeUploadDoc, setActiveUploadDoc] = useState(null);
   const [showDocPreviewKey, setShowDocPreviewKey] = useState(null);
 
@@ -64,11 +66,11 @@ export default function StepDocSubmission({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>STEP 3 OF 5</Text>
+          <Text style={styles.badgeText}>{t('rentBike.docStepBadge', 'STEP 3 OF 5')}</Text>
         </View>
-        <Text style={styles.sectionTitle}>Vehicle Document Submission</Text>
+        <Text style={styles.sectionTitle}>{t('rentBike.docTitle', 'Vehicle Document Submission')}</Text>
         <Text style={styles.sectionSub}>
-          Upload authentic RTO and compliance documents. High-resolution PDF or JPG documents are accepted.
+          {t('rentBike.docSub', 'Upload authentic RTO and compliance documents. High-resolution PDF or JPG documents are accepted.')}
         </Text>
       </View>
 
@@ -78,9 +80,9 @@ export default function StepDocSubmission({
           <Lock size={18} color="#38BDF8" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.confidentialityTitle}>Data Privacy & Confidentiality Guarantee</Text>
+          <Text style={styles.confidentialityTitle}>{t('rentBike.confidentialityTitle', 'Confidential & Encrypted Document Vault')}</Text>
           <Text style={styles.confidentialityText}>
-            All uploaded vehicle certificates and documents are strictly confidential and encrypted at rest. They are accessible solely by authorized compliance personnel for identity and registration verification. Document files are never made public to prospective renters.
+            {t('rentBike.confidentialitySub', 'All uploaded registration certificates, insurance binders, and PUC records are strictly encrypted. They are never shown publicly.')}
           </Text>
         </View>
       </View>
@@ -92,7 +94,7 @@ export default function StepDocSubmission({
             <FileText size={20} color="#38BDF8" />
             <View>
               <Text style={styles.docCardHeading}>
-                Registration Certificate (RC) <Text style={styles.req}>*</Text>
+                {t('rentBike.rcTitle', 'Registration Certificate (RC)')} <Text style={styles.req}>*</Text>
               </Text>
               <Text style={styles.docCardSub}>
                 Upload clear front & back copy of Vehicle RC Smart Card or Parivahan Digital RC.
@@ -201,7 +203,7 @@ export default function StepDocSubmission({
             <ShieldCheck size={20} color="#38BDF8" />
             <View>
               <Text style={styles.docCardHeading}>
-                Insurance Certificate <Text style={styles.req}>*</Text>
+                {t('rentBike.insuranceTitle', 'Comprehensive Insurance Certificate')} <Text style={styles.req}>*</Text>
               </Text>
               <Text style={styles.docCardSub}>
                 Upload valid Third-Party or Comprehensive Motor Vehicle Policy.
@@ -280,6 +282,7 @@ export default function StepDocSubmission({
                 onChangeText={(val) => onChange('insurancePolicyNumber', val)}
                 placeholder="e.g. 3005/2024/9812401"
                 placeholderTextColor={COLORS.textMuted}
+                selectTextOnFocus={true}
               />
             </View>
             {errors.insurancePolicyNumber && (
@@ -299,6 +302,7 @@ export default function StepDocSubmission({
                 onChangeText={(val) => onChange('insuranceExpiryDate', val)}
                 placeholder="YYYY-MM-DD (e.g. 2027-05-18)"
                 placeholderTextColor={COLORS.textMuted}
+                selectTextOnFocus={true}
               />
             </View>
             {errors.insuranceExpiryDate && (
@@ -319,7 +323,7 @@ export default function StepDocSubmission({
             <FileText size={20} color="#38BDF8" />
             <View>
               <Text style={styles.docCardHeading}>
-                Pollution Under Control (PUC) Certificate <Text style={styles.req}>*</Text>
+                {t('rentBike.pucTitle', 'Pollution Under Control (PUC)')} <Text style={styles.req}>*</Text>
               </Text>
               <Text style={styles.docCardSub}>
                 Mandatory for petrol/combustion vehicles. Must be currently valid.
@@ -396,6 +400,7 @@ export default function StepDocSubmission({
               onChangeText={(val) => onChange('pucExpiryDate', val)}
               placeholder="YYYY-MM-DD (e.g. 2027-04-10)"
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.pucExpiryDate && <Text style={styles.errorText}>{errors.pucExpiryDate}</Text>}
@@ -408,12 +413,12 @@ export default function StepDocSubmission({
 
       {/* 4. Additional Vehicle Numbers & Ownership Declaration */}
       <View style={styles.additionalInfoCard}>
-        <Text style={styles.infoCardTitle}>Additional Vehicle Identifiers & Ownership</Text>
+        <Text style={styles.infoCardTitle}>{t('rentBike.identifiersTitle', 'Additional Vehicle Identifiers & Ownership')}</Text>
 
         <View style={styles.gridTwo}>
           <View style={styles.gridItem}>
             <Text style={styles.label}>
-              Chassis Number (VIN) <Text style={styles.req}>*</Text>
+              {t('rentBike.chassisLabel', 'Chassis Number (VIN)')} <Text style={styles.req}>*</Text>
             </Text>
             <View style={[styles.inputBox, errors.chassisNumber && styles.inputError]}>
               <Hash size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -421,9 +426,10 @@ export default function StepDocSubmission({
                 style={[styles.textInput, { letterSpacing: 1 }]}
                 value={data.chassisNumber}
                 onChangeText={(val) => onChange('chassisNumber', val.toUpperCase())}
-                placeholder="17-character VIN e.g. ME3H450XXXX88291"
+                placeholder={t('rentBike.chassisPlaceholder', '17-character VIN e.g. ME3H450XXXX88291')}
                 placeholderTextColor={COLORS.textMuted}
                 autoCapitalize="characters"
+                selectTextOnFocus={true}
               />
             </View>
             {errors.chassisNumber && <Text style={styles.errorText}>{errors.chassisNumber}</Text>}
@@ -431,7 +437,7 @@ export default function StepDocSubmission({
 
           <View style={styles.gridItem}>
             <Text style={styles.label}>
-              Engine Number <Text style={styles.req}>*</Text>
+              {t('rentBike.engineLabel', 'Engine Number')} <Text style={styles.req}>*</Text>
             </Text>
             <View style={[styles.inputBox, errors.engineNumber && styles.inputError]}>
               <Hash size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -439,9 +445,10 @@ export default function StepDocSubmission({
                 style={[styles.textInput, { letterSpacing: 1 }]}
                 value={data.engineNumber}
                 onChangeText={(val) => onChange('engineNumber', val.toUpperCase())}
-                placeholder="e.g. H450E882910"
+                placeholder={t('rentBike.enginePlaceholder', 'e.g. H450E882910')}
                 placeholderTextColor={COLORS.textMuted}
                 autoCapitalize="characters"
+                selectTextOnFocus={true}
               />
             </View>
             {errors.engineNumber && <Text style={styles.errorText}>{errors.engineNumber}</Text>}
@@ -450,7 +457,7 @@ export default function StepDocSubmission({
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>
-            Registered Owner Name (as printed on RC) <Text style={styles.req}>*</Text>
+            {t('rentBike.regOwnerLabel', 'Registered Owner Name (as printed on RC)')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.registeredOwnerName && styles.inputError]}>
             <UserCheck size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -460,6 +467,7 @@ export default function StepDocSubmission({
               onChangeText={(val) => onChange('registeredOwnerName', val)}
               placeholder="e.g. Vikram Malhotra"
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.registeredOwnerName && (
@@ -470,7 +478,7 @@ export default function StepDocSubmission({
         {/* Ownership vs Authorized Representative Declaration */}
         <View style={styles.ownershipSection}>
           <Text style={styles.label}>
-            Ownership / Authorization Declaration <Text style={styles.req}>*</Text>
+            {t('rentBike.ownershipDeclaration', 'Ownership / Authorization Declaration')} <Text style={styles.req}>*</Text>
           </Text>
 
           <View style={styles.radioOptionRow}>
@@ -491,7 +499,7 @@ export default function StepDocSubmission({
                 {data.ownershipType === 'registered_owner' && <View style={styles.radioDot} />}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.radioTitle}>I am the Registered Vehicle Owner</Text>
+                <Text style={styles.radioTitle}>{t('rentBike.iAmOwner', 'I am the Registered Vehicle Owner')}</Text>
                 <Text style={styles.radioSub}>
                   My name directly matches the owner name stated on the Vehicle Registration Certificate.
                 </Text>
@@ -515,7 +523,7 @@ export default function StepDocSubmission({
                 {data.ownershipType === 'authorized_representative' && <View style={styles.radioDot} />}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.radioTitle}>I have Official Authorization from Owner</Text>
+                <Text style={styles.radioTitle}>{t('rentBike.iAmRep', 'I have Official Authorization from Owner')}</Text>
                 <Text style={styles.radioSub}>
                   I hold written consent, Power of Attorney (PoA) or family consent to rent this vehicle.
                 </Text>

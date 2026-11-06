@@ -41,6 +41,7 @@ export default function HomeScreen({
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookModal,
+  onRentBikePress,
 }) {
   const { t, isHindi } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -124,7 +125,8 @@ export default function HomeScreen({
             <TouchableOpacity
               style={styles.btnRentBikeHero}
               onPress={() => {
-                navigation.navigate('RentBike');
+                if (onRentBikePress) onRentBikePress();
+                else navigation.navigate('RentBike');
               }}
               activeOpacity={0.8}
             >
@@ -456,7 +458,10 @@ export default function HomeScreen({
             <View style={styles.ownerOppBtns}>
               <TouchableOpacity
                 style={styles.ownerListNowBtn}
-                onPress={() => navigation.navigate('RentBike')}
+                onPress={() => {
+                  if (onRentBikePress) onRentBikePress();
+                  else navigation.navigate('RentBike');
+                }}
                 activeOpacity={0.8}
               >
                 <Sparkles size={16} color="#FFFFFF" />

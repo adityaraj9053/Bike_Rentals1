@@ -12,6 +12,7 @@ export default function CustomHeader({
   onOpenAuth,
   onOpenWhatsApp,
   onStartBooking,
+  onRentBikePress,
 }) {
   const { language, toggleLanguage, t, isHindi } = useLanguage();
   const { width } = useWindowDimensions();
@@ -20,6 +21,16 @@ export default function CustomHeader({
   const isMobile = width < 768;
   const showBrandName = !isMobile;
   const isVerySmall = width < 420;
+
+  const handleRentBike = () => {
+    if (onRentBikePress) {
+      onRentBikePress();
+    } else if (!user) {
+      if (onOpenAuth) onOpenAuth();
+    } else if (navigation) {
+      navigation.navigate('RentBike');
+    }
+  };
 
   const handleBookPress = () => {
     // Requirement: In navbar, clicking the booking button directly opens the Fleet (Motorbikes) page!
@@ -72,11 +83,11 @@ export default function CustomHeader({
           {/* Rent Your Bike Navigation Button */}
           <TouchableOpacity
             style={[styles.rentBikeBtn, isVerySmall && styles.rentBikeBtnSmall]}
-            onPress={() => navigation?.navigate('RentBike')}
+            onPress={handleRentBike}
             activeOpacity={0.8}
           >
             <Sparkles size={12} color="#FFFFFF" />
-            <Text style={styles.rentBikeBtnText}>{isMobile ? 'List Bike' : 'Rent Your Bike'}</Text>
+            <Text style={styles.rentBikeBtnText}>{isMobile ? 'Rent Bike' : 'Rent Your Bike'}</Text>
           </TouchableOpacity>
 
           {/* Admin Dashboard Quick Access Button */}

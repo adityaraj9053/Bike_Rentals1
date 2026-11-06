@@ -19,8 +19,10 @@ import {
   FileText,
   Upload,
   Info,
+  X,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
 import PhoneInput from '../PhoneInput';
 
 export default function StepOwnerInfo({
@@ -28,7 +30,11 @@ export default function StepOwnerInfo({
   onChange,
   errors,
   onShowToast,
+  user,
+  onOpenAuth,
 }) {
+  const { t, isHindi } = useLanguage();
+
   // Mobile OTP simulation state
   const [otpSent, setOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(0);
@@ -109,18 +115,67 @@ export default function StepOwnerInfo({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>STEP 1 OF 5</Text>
+          <Text style={styles.badgeText}>{t('rentBike.ownerStepBadge', 'STEP 1 OF 5')}</Text>
         </View>
-        <Text style={styles.sectionTitle}>Owner Information</Text>
+        <Text style={styles.sectionTitle}>{t('rentBike.ownerTitle', 'Owner Information')}</Text>
         <Text style={styles.sectionSub}>
-          Provide your legal personal information as appearing on your government-issued identity documents.
+          {t('rentBike.ownerSub', 'Provide your legal personal information as appearing on your government-issued identity documents.')}
         </Text>
       </View>
+
+      {/* Account Authentication Banner */}
+      {user ? (
+        <View style={styles.authBanner}>
+          <View style={styles.authAvatarCircle}>
+            <User size={18} color="#38BDF8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Text style={styles.authNameText}>{t('rentBike.signedInAs', 'Signed in as')} {user.name || 'Registered User'}</Text>
+              <View style={styles.authVerifiedPill}>
+                <ShieldCheck size={12} color="#10B981" />
+                <Text style={styles.authVerifiedPillText}>{t('rentBike.authenticatedBadge', 'Authenticated')}</Text>
+              </View>
+            </View>
+            <Text style={styles.authSubText}>
+              {user.email || 'Account connected'} {user.phone ? `• ${user.countryCode || '+91'} ${user.phone}` : ''}
+            </Text>
+          </View>
+          {onOpenAuth && (
+            <TouchableOpacity
+              style={styles.switchAccountBtn}
+              onPress={onOpenAuth}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.switchAccountBtnText}>{t('rentBike.switchAccount', 'Switch')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <View style={styles.guestAlertBanner}>
+          <AlertCircle size={20} color="#F59E0B" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.guestAlertTitle}>{t('rentBike.notLoggedIn', 'Not Logged In')}</Text>
+            <Text style={styles.guestAlertSub}>
+              {t('rentBike.notLoggedInSub', 'Please sign in to link this bike submission directly to your verified account.')}
+            </Text>
+          </View>
+          {onOpenAuth && (
+            <TouchableOpacity
+              style={styles.guestLoginBtn}
+              onPress={onOpenAuth}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.guestLoginBtnText}>{t('rentBike.logInBtn', 'Log In')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Full Name */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Full Legal Name <Text style={styles.req}>*</Text>
+          {t('rentBike.fullNameLabel', 'Full Legal Name')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={[styles.inputBox, errors.fullName && styles.inputError]}>
           <User size={18} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -128,9 +183,19 @@ export default function StepOwnerInfo({
             style={styles.textInput}
             value={data.fullName}
             onChangeText={(val) => onChange('fullName', val)}
-            placeholder="e.g. Vikram Malhotra"
-            placeholderTextColor={COLORS.textMuted}
+            placeholder={t('rentBike.fullNamePlaceholder', 'e.g. Vikram Malhotra')}
+            placeholderTextColor="#64748B"
+            selectTextOnFocus={true}
           />
+          {!!data.fullName && (
+            <TouchableOpacity
+              onPress={() => onChange('fullName', '')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.clearFieldBtn}
+            >
+              <X size={14} color="#64748B" />
+            </TouchableOpacity>
+          )}
         </View>
         {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
       </View>
@@ -139,15 +204,15 @@ export default function StepOwnerInfo({
       <View style={styles.fieldGroup}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>
-            Mobile Number <Text style={styles.req}>*</Text>
+            {t('rentBike.mobileLabel', 'Mobile Number')} <Text style={styles.req}>*</Text>
           </Text>
           {data.mobileVerified ? (
             <View style={styles.verifiedTag}>
               <CheckCircle2 size={13} color="#10B981" />
-              <Text style={styles.verifiedTagText}>Mobile Verified</Text>
+              <Text style={styles.verifiedTagText}>{t('rentBike.mobileVerified', 'Mobile Verified')}</Text>
             </View>
           ) : (
-            <Text style={styles.pendingTag}>OTP Verification Required</Text>
+            <Text style={styles.pendingTag}>{t('rentBike.otpReq', 'OTP Verification Required')}</Text>
           )}
         </View>
 
@@ -159,7 +224,7 @@ export default function StepOwnerInfo({
             onChange('phone', val);
             if (data.mobileVerified) onChange('mobileVerified', false);
           }}
-          placeholder="Enter 10-digit mobile number"
+          placeholder={t('rentBike.phonePlaceholder', 'e.g. 9820144521')}
           error={!!errors.phone}
         />
         {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
@@ -169,7 +234,7 @@ export default function StepOwnerInfo({
           <View style={styles.otpCard}>
             <View style={styles.otpCardHeader}>
               <Clock size={15} color="#38BDF8" />
-              <Text style={styles.otpCardTitle}>Two-Step Mobile Verification</Text>
+              <Text style={styles.otpCardTitle}>{t('rentBike.mobileOtpTitle', 'Two-Step Mobile Verification')}</Text>
             </View>
 
             {!otpSent ? (
@@ -179,7 +244,7 @@ export default function StepOwnerInfo({
                 activeOpacity={0.8}
               >
                 <Send size={14} color="#FFFFFF" />
-                <Text style={styles.sendOtpBtnText}>Send Mobile Verification OTP</Text>
+                <Text style={styles.sendOtpBtnText}>{t('rentBike.sendOtpBtn', 'Send Mobile Verification OTP')}</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.otpInputArea}>
@@ -194,14 +259,15 @@ export default function StepOwnerInfo({
                     keyboardType="number-pad"
                     maxLength={6}
                     placeholder="4521"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor="#64748B"
+                    selectTextOnFocus={true}
                   />
                   <TouchableOpacity
                     style={styles.verifyOtpBtn}
                     onPress={handleVerifyMobileOtp}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.verifyOtpBtnText}>Verify OTP</Text>
+                    <Text style={styles.verifyOtpBtnText}>{t('rentBike.verifyOtpBtn', 'Verify OTP')}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -212,7 +278,7 @@ export default function StepOwnerInfo({
                     <Text style={styles.resendTimerText}>Resend OTP in {otpTimer}s</Text>
                   ) : (
                     <TouchableOpacity onPress={handleSendMobileOtp}>
-                      <Text style={styles.resendLink}>Resend OTP</Text>
+                      <Text style={styles.resendLink}>{t('rentBike.resendOtp', 'Resend OTP')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -226,15 +292,15 @@ export default function StepOwnerInfo({
       <View style={styles.fieldGroup}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>
-            Email Address <Text style={styles.req}>*</Text>
+            {t('rentBike.emailLabel', 'Email Address')} <Text style={styles.req}>*</Text>
           </Text>
           {data.emailVerified ? (
             <View style={styles.verifiedTag}>
               <CheckCircle2 size={13} color="#10B981" />
-              <Text style={styles.verifiedTagText}>Email Verified</Text>
+              <Text style={styles.verifiedTagText}>{t('rentBike.emailVerified', 'Email Verified')}</Text>
             </View>
           ) : (
-            <Text style={styles.pendingTag}>Verification Required</Text>
+            <Text style={styles.pendingTag}>{t('rentBike.verifyReq', 'Verification Required')}</Text>
           )}
         </View>
 
@@ -247,11 +313,24 @@ export default function StepOwnerInfo({
               onChange('email', val);
               if (data.emailVerified) onChange('emailVerified', false);
             }}
-            placeholder="e.g. vikram.malhotra@gmail.com"
-            placeholderTextColor={COLORS.textMuted}
+            placeholder={t('rentBike.emailPlaceholder', 'e.g. name@example.com')}
+            placeholderTextColor="#64748B"
             keyboardType="email-address"
             autoCapitalize="none"
+            selectTextOnFocus={true}
           />
+          {!!data.email && (
+            <TouchableOpacity
+              onPress={() => {
+                onChange('email', '');
+                if (data.emailVerified) onChange('emailVerified', false);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.clearFieldBtn}
+            >
+              <X size={14} color="#64748B" />
+            </TouchableOpacity>
+          )}
         </View>
         {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
@@ -260,7 +339,7 @@ export default function StepOwnerInfo({
           <View style={styles.otpCard}>
             <View style={styles.otpCardHeader}>
               <Mail size={15} color="#38BDF8" />
-              <Text style={styles.otpCardTitle}>Email Address Confirmation</Text>
+              <Text style={styles.otpCardTitle}>{t('rentBike.emailConfirmTitle', 'Email Address Confirmation')}</Text>
             </View>
 
             {!emailVerificationSent ? (
@@ -270,7 +349,7 @@ export default function StepOwnerInfo({
                 activeOpacity={0.8}
               >
                 <Send size={14} color="#FFFFFF" />
-                <Text style={styles.sendOtpBtnText}>Send Email Verification Code</Text>
+                <Text style={styles.sendOtpBtnText}>{t('rentBike.sendEmailCodeBtn', 'Send Email Verification Code')}</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.otpInputArea}>
@@ -285,14 +364,15 @@ export default function StepOwnerInfo({
                     keyboardType="number-pad"
                     maxLength={6}
                     placeholder="7788"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor="#64748B"
+                    selectTextOnFocus={true}
                   />
                   <TouchableOpacity
                     style={styles.verifyOtpBtn}
                     onPress={handleVerifyEmailCode}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.verifyOtpBtnText}>Confirm Email</Text>
+                    <Text style={styles.verifyOtpBtnText}>{t('rentBike.confirmEmailBtn', 'Confirm Email')}</Text>
                   </TouchableOpacity>
                 </View>
                 {emailCodeError ? <Text style={styles.errorText}>{emailCodeError}</Text> : null}
@@ -305,7 +385,7 @@ export default function StepOwnerInfo({
       {/* Residential Address */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Residential Address <Text style={styles.req}>*</Text>
+          {t('rentBike.addressLabel', 'Residential Address')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={[styles.inputBox, styles.textAreaBox, errors.address && styles.inputError]}>
           <MapPin size={18} color={COLORS.accentCyanLight} style={[styles.inputIcon, { marginTop: 12 }]} />
@@ -313,11 +393,21 @@ export default function StepOwnerInfo({
             style={[styles.textInput, styles.textAreaInput]}
             value={data.address}
             onChangeText={(val) => onChange('address', val)}
-            placeholder="Flat/House No., Building Name, Street/Locality"
-            placeholderTextColor={COLORS.textMuted}
+            placeholder={t('rentBike.addressPlaceholder', 'Flat/House No., Building Name, Street/Locality')}
+            placeholderTextColor="#64748B"
             multiline
             numberOfLines={2}
+            selectTextOnFocus={true}
           />
+          {!!data.address && (
+            <TouchableOpacity
+              onPress={() => onChange('address', '')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={[styles.clearFieldBtn, { marginTop: 10 }]}
+            >
+              <X size={14} color="#64748B" />
+            </TouchableOpacity>
+          )}
         </View>
         {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
       </View>
@@ -326,50 +416,80 @@ export default function StepOwnerInfo({
       <View style={styles.gridThree}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            City <Text style={styles.req}>*</Text>
+            {t('rentBike.cityLabel', 'City')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.city && styles.inputError]}>
             <TextInput
               style={styles.textInput}
               value={data.city}
               onChangeText={(val) => onChange('city', val)}
-              placeholder="e.g. Mumbai"
-              placeholderTextColor={COLORS.textMuted}
+              placeholder={t('rentBike.cityPlaceholder', 'e.g. Mumbai')}
+              placeholderTextColor="#64748B"
+              selectTextOnFocus={true}
             />
+            {!!data.city && (
+              <TouchableOpacity
+                onPress={() => onChange('city', '')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearFieldBtn}
+              >
+                <X size={14} color="#64748B" />
+              </TouchableOpacity>
+            )}
           </View>
           {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
         </View>
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            State <Text style={styles.req}>*</Text>
+            {t('rentBike.stateLabel', 'State')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.state && styles.inputError]}>
             <TextInput
               style={styles.textInput}
               value={data.state}
               onChangeText={(val) => onChange('state', val)}
-              placeholder="e.g. Maharashtra"
-              placeholderTextColor={COLORS.textMuted}
+              placeholder={t('rentBike.statePlaceholder', 'e.g. Maharashtra')}
+              placeholderTextColor="#64748B"
+              selectTextOnFocus={true}
             />
+            {!!data.state && (
+              <TouchableOpacity
+                onPress={() => onChange('state', '')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearFieldBtn}
+              >
+                <X size={14} color="#64748B" />
+              </TouchableOpacity>
+            )}
           </View>
           {errors.state && <Text style={styles.errorText}>{errors.state}</Text>}
         </View>
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            PIN Code <Text style={styles.req}>*</Text>
+            {t('rentBike.pincodeLabel', 'PIN Code')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.pincode && styles.inputError]}>
             <TextInput
               style={styles.textInput}
               value={data.pincode}
               onChangeText={(val) => onChange('pincode', val.replace(/\D/g, '').slice(0, 6))}
-              placeholder="e.g. 400050"
-              placeholderTextColor={COLORS.textMuted}
+              placeholder={t('rentBike.pincodePlaceholder', 'e.g. 400050')}
+              placeholderTextColor="#64748B"
               keyboardType="number-pad"
               maxLength={6}
+              selectTextOnFocus={true}
             />
+            {!!data.pincode && (
+              <TouchableOpacity
+                onPress={() => onChange('pincode', '')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearFieldBtn}
+              >
+                <X size={14} color="#64748B" />
+              </TouchableOpacity>
+            )}
           </View>
           {errors.pincode && <Text style={styles.errorText}>{errors.pincode}</Text>}
         </View>
@@ -382,9 +502,9 @@ export default function StepOwnerInfo({
             <ShieldCheck size={20} color="#38BDF8" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.idCardTitle}>Owner Identity Document (KYC)</Text>
+            <Text style={styles.idCardTitle}>{t('rentBike.kycTitle', 'Owner Identity Document (KYC)')}</Text>
             <Text style={styles.idCardSub}>
-              Required to prevent fraudulent listings and protect community assets.
+              {t('rentBike.kycSub', 'Required to prevent fraudulent listings and protect community assets.')}
             </Text>
           </View>
         </View>
@@ -392,7 +512,7 @@ export default function StepOwnerInfo({
         <View style={styles.idNoticeBanner}>
           <Info size={16} color="#38BDF8" style={{ marginTop: 2 }} />
           <Text style={styles.idNoticeText}>
-            <Text style={styles.boldWhite}>Important Notice:</Text> Uploading an ID file submits your application into our queue. An uploaded document is <Text style={{ color: '#F59E0B', fontWeight: '700' }}>NOT</Text> marked as verified until an authorized admin reviews and confirms it.
+            {t('rentBike.kycNotice', 'Important Notice: Uploading an ID file submits your application into our queue. An uploaded document is NOT marked as verified until an authorized admin reviews and confirms it.')}
           </Text>
         </View>
 
@@ -439,7 +559,7 @@ export default function StepOwnerInfo({
             activeOpacity={0.8}
           >
             <Upload size={16} color="#38BDF8" />
-            <Text style={styles.uploadTriggerText}>Upload Identity Document (PDF / JPG max 5MB)</Text>
+            <Text style={styles.uploadTriggerText}>{t('rentBike.uploadIdPrompt', 'Upload Identity Document (PDF / JPG max 5MB)')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -798,6 +918,103 @@ const styles = StyleSheet.create({
     color: '#38BDF8',
     fontSize: 13,
     fontWeight: '700',
+  },
+  authBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    marginBottom: 18,
+  },
+  authAvatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authNameText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  authVerifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  authVerifiedPillText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  authSubText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  switchAccountBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  switchAccountBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  guestAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    marginBottom: 18,
+  },
+  guestAlertTitle: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  guestAlertSub: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  guestLoginBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#F59E0B',
+  },
+  guestLoginBtnText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  clearFieldBtn: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
   },
 });
 

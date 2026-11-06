@@ -95,11 +95,24 @@ export default function PhoneInput({
             placeholder ||
             (isHindi ? '10 अंकों का मोबाइल नंबर' : '10-digit mobile number')
           }
-          placeholderTextColor="#475569"
+          placeholderTextColor="#64748B"
           keyboardType="phone-pad"
           maxLength={10}
           autoFocus={autoFocus}
+          selectTextOnFocus={true}
         />
+
+        {/* Clear Button when digits exist */}
+        {cleanDigits.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearBtn}
+            onPress={() => onChangeText && onChangeText('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Clear phone number"
+          >
+            <X size={14} color="#64748B" />
+          </TouchableOpacity>
+        )}
 
         {/* 10 Digits Completion Indicator */}
         {isComplete ? (
@@ -269,6 +282,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 4,
+  },
+  clearBtn: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 4,
   },
   digitCounter: {

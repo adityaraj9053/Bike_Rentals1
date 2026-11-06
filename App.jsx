@@ -93,6 +93,7 @@ export default function App() {
   // User State
   const [user, setUser] = useState(null);
   const [pendingBookingBike, setPendingBookingBike] = useState(null);
+  const [isPendingRentBike, setIsPendingRentBike] = useState(false);
 
   // Modals & Sheets
   const [selectedBike, setSelectedBike] = useState(BIKES_DATA[0]);
@@ -151,11 +152,30 @@ export default function App() {
     }
   };
 
+  // Requirement: Login check before listing bike!
+  const handleRentBikePress = () => {
+    if (!user) {
+      setIsPendingRentBike(true);
+      setIsAuthOpen(true);
+      showToast('Please log in or sign up first to list your bike.');
+      return;
+    }
+
+    if (navigationRef.current) {
+      navigationRef.current.navigate('RentBike');
+    }
+  };
+
   const handleUserUpdate = (userData) => {
     setUser(userData);
     if (userData) {
       showToast(`Welcome back, ${userData.name}!`);
-      if (pendingBookingBike) {
+      if (isPendingRentBike) {
+        setIsPendingRentBike(false);
+        if (navigationRef.current) {
+          navigationRef.current.navigate('RentBike');
+        }
+      } else if (pendingBookingBike) {
         const target = pendingBookingBike;
         setPendingBookingBike(null);
         if (navigationRef.current) {
@@ -163,6 +183,7 @@ export default function App() {
         }
       }
     } else {
+      setIsPendingRentBike(false);
       setPendingBookingBike(null);
       showToast('Signed out successfully.');
     }
@@ -196,6 +217,7 @@ export default function App() {
                 onShowToast={showToast}
                 sharedBikes={sharedBikes}
                 onBikeSubmitted={handleBikeSubmitted}
+                onRentBikePress={handleRentBikePress}
               />
 
               {/* Floating WhatsApp Quick Action Button */}

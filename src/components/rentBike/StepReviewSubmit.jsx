@@ -27,6 +27,7 @@ import {
   Send,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export default function StepReviewSubmit({
   data,
@@ -35,6 +36,7 @@ export default function StepReviewSubmit({
   isSubmitting = false,
   errors = {},
 }) {
+  const { t, isHindi } = useLanguage();
   const [agreedAccurate, setAgreedAccurate] = useState(false);
   const [agreedAuthorization, setAgreedAuthorization] = useState(false);
   const [agreedPolicies, setAgreedPolicies] = useState(false);
@@ -45,7 +47,11 @@ export default function StepReviewSubmit({
 
   const handleSubmit = () => {
     if (!allAgreed) {
-      setAgreementError('Please review and check all mandatory declaration boxes before submitting.');
+      setAgreementError(
+        isHindi
+          ? 'सबमिट करने से पहले कृपया सभी अनिवार्य घोषणा बॉक्स देखें और टिक करें।'
+          : 'Please review and check all mandatory declaration boxes before submitting.'
+      );
       return;
     }
     setAgreementError('');
@@ -56,11 +62,11 @@ export default function StepReviewSubmit({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>STEP 5 OF 5</Text>
+          <Text style={styles.badgeText}>{t('rentBike.reviewStepBadge', 'STEP 5 OF 5')}</Text>
         </View>
-        <Text style={styles.sectionTitle}>Review & Final Submission</Text>
+        <Text style={styles.sectionTitle}>{t('rentBike.reviewTitle', 'Review & Final Submission')}</Text>
         <Text style={styles.sectionSub}>
-          Please verify that all submitted vehicle specifications and legal declarations are accurate before submitting for platform compliance review.
+          {t('rentBike.reviewSub', 'Please verify that all submitted vehicle specifications and legal declarations are accurate before submitting for platform compliance review.')}
         </Text>
       </View>
 
@@ -257,9 +263,13 @@ export default function StepReviewSubmit({
 
       {/* Mandatory Checkboxes & Declarations */}
       <View style={styles.declarationsSection}>
-        <Text style={styles.declarationsHeading}>Mandatory Legal Declarations & Consent</Text>
+        <Text style={styles.declarationsHeading}>
+          {t('rentBike.termsTitle', 'Mandatory Legal Declarations & Consent')}
+        </Text>
         <Text style={styles.declarationsSub}>
-          Please check each declaration to proceed with vehicle listing:
+          {isHindi
+            ? 'वाहन लिस्टिंग के साथ आगे बढ़ने के लिए कृपया प्रत्येक घोषणा की जांच करें:'
+            : 'Please check each declaration to proceed with vehicle listing:'}
         </Text>
 
         {/* Checkbox 1 */}
@@ -272,7 +282,7 @@ export default function StepReviewSubmit({
             {agreedAccurate && <Check size={14} color="#FFFFFF" />}
           </View>
           <Text style={styles.checkboxText}>
-            I confirm that the information submitted is accurate.
+            {t('rentBike.term1', 'I confirm that the information submitted is accurate.')}
           </Text>
         </TouchableOpacity>
 
@@ -286,7 +296,7 @@ export default function StepReviewSubmit({
             {agreedAuthorization && <Check size={14} color="#FFFFFF" />}
           </View>
           <Text style={styles.checkboxText}>
-            I confirm that I am the registered owner or have appropriate authorization.
+            {t('rentBike.term2', 'I confirm that I am the registered owner or have appropriate authorization.')}
           </Text>
         </TouchableOpacity>
 
@@ -300,7 +310,7 @@ export default function StepReviewSubmit({
             {agreedPolicies && <Check size={14} color="#FFFFFF" />}
           </View>
           <Text style={styles.checkboxText}>
-            I agree to the platform's verification and rental policies.
+            {t('rentBike.term3', "I agree to the platform's verification and rental policies.")}
           </Text>
         </TouchableOpacity>
 
@@ -314,7 +324,7 @@ export default function StepReviewSubmit({
             {agreedConsent && <Check size={14} color="#FFFFFF" />}
           </View>
           <Text style={styles.checkboxText}>
-            I consent to the processing of my information for the stated verification purposes.
+            {t('rentBike.term4', 'I consent to the processing of my information for the stated verification purposes.')}
           </Text>
         </TouchableOpacity>
 
@@ -339,13 +349,17 @@ export default function StepReviewSubmit({
           ) : (
             <>
               <ShieldCheck size={20} color="#FFFFFF" />
-              <Text style={styles.finalSubmitBtnText}>Submit for Verification</Text>
+              <Text style={styles.finalSubmitBtnText}>
+                {t('rentBike.submitBtn', 'Submit for Verification')}
+              </Text>
             </>
           )}
         </TouchableOpacity>
 
         <Text style={styles.submitDisclaimer}>
-          Listing will become active on the marketplace only after manual document review by our operations verification team.
+          {isHindi
+            ? 'हमारी संचालन सत्यापन टीम द्वारा मैन्युअल दस्तावेज़ समीक्षा के बाद ही लिस्टिंग मार्केटप्लेस पर सक्रिय होगी।'
+            : 'Listing will become active on the marketplace only after manual document review by our operations verification team.'}
         </Text>
       </View>
     </View>

@@ -22,6 +22,7 @@ import {
   FileCheck,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const PRESET_RULES = [
   'Complimentary helmet included with bike',
@@ -39,6 +40,7 @@ export default function StepRentalInfo({
   errors,
   onShowToast,
 }) {
+  const { t, isHindi } = useLanguage();
   const [customRuleInput, setCustomRuleInput] = useState('');
 
   const togglePresetRule = (ruleText) => {
@@ -71,11 +73,11 @@ export default function StepRentalInfo({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>STEP 4 OF 5</Text>
+          <Text style={styles.badgeText}>{t('rentBike.rentalStepBadge', 'STEP 4 OF 5')}</Text>
         </View>
-        <Text style={styles.sectionTitle}>Rental Pricing & Availability</Text>
+        <Text style={styles.sectionTitle}>{t('rentBike.rentalTitle', 'Rental Pricing & Availability')}</Text>
         <Text style={styles.sectionSub}>
-          Set transparent daily rental rates, security deposits, pickup hub locations, and rider guidelines.
+          {t('rentBike.rentalSub', 'Set transparent daily rental rates, security deposits, pickup hub locations, and rider guidelines.')}
         </Text>
       </View>
 
@@ -83,7 +85,7 @@ export default function StepRentalInfo({
       <View style={styles.gridTwo}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Daily Rental Price (₹ / day) <Text style={styles.req}>*</Text>
+            {t('rentBike.dailyPriceLabel', 'Daily Rental Price (₹ / day)')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.dailyPrice && styles.inputError]}>
             <Text style={styles.currencyPrefix}>₹</Text>
@@ -94,6 +96,7 @@ export default function StepRentalInfo({
               placeholder="e.g. 1500"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="number-pad"
+              selectTextOnFocus={true}
             />
           </View>
           <Text style={styles.fieldHelper}>Recommended: ₹1,200 - ₹2,200 depending on CC & model</Text>
@@ -102,7 +105,7 @@ export default function StepRentalInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Refundable Security Deposit (₹) <Text style={styles.req}>*</Text>
+            {t('rentBike.securityDepositLabel', 'Refundable Security Deposit (₹)')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.securityDeposit && styles.inputError]}>
             <Shield size={18} color="#38BDF8" style={styles.inputIcon} />
@@ -114,6 +117,7 @@ export default function StepRentalInfo({
               placeholder="e.g. 3500"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="number-pad"
+              selectTextOnFocus={true}
             />
           </View>
           <Text style={styles.fieldHelper}>Held safely in escrow by platform during rental trip</Text>
@@ -125,7 +129,7 @@ export default function StepRentalInfo({
       <View style={styles.gridTwo}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Minimum Rental Duration <Text style={styles.req}>*</Text>
+            {t('rentBike.minDurationLabel', 'Minimum Rental Duration')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={styles.pillSelectorRow}>
             {['1 Day', '2 Days', '3 Days'].map((opt, idx) => {
@@ -149,7 +153,7 @@ export default function StepRentalInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Maximum Rental Duration <Text style={styles.req}>*</Text>
+            {t('rentBike.maxDurationLabel', 'Maximum Rental Duration')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={styles.pillSelectorRow}>
             {['7 Days', '14 Days', '30 Days'].map((opt) => {
@@ -175,13 +179,13 @@ export default function StepRentalInfo({
       {/* Available Rental Dates Selection */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Available Rental Window <Text style={styles.req}>*</Text>
+          {t('rentBike.availabilityTitle', 'Listing Availability Calendar')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={styles.dateSelectorCard}>
           <View style={styles.dateSelectorLeft}>
             <Calendar size={20} color="#38BDF8" />
             <View>
-              <Text style={styles.dateSelectorTitle}>Listing Availability Calendar</Text>
+              <Text style={styles.dateSelectorTitle}>{t('rentBike.availabilityTitle', 'Listing Availability Calendar')}</Text>
               <Text style={styles.dateSelectorSub}>
                 {data.availableFrom && data.availableTo
                   ? `Active from ${data.availableFrom} to ${data.availableTo}`
@@ -222,7 +226,7 @@ export default function StepRentalInfo({
       <View style={styles.gridTwo}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Pickup Area / Locality <Text style={styles.req}>*</Text>
+            {t('rentBike.pickupAreaLabel', 'Pickup Area / Locality')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.pickupLocation && styles.inputError]}>
             <MapPin size={18} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -230,8 +234,9 @@ export default function StepRentalInfo({
               style={styles.textInput}
               value={data.pickupLocation}
               onChangeText={(val) => onChange('pickupLocation', val)}
-              placeholder="e.g. Bandra West, Mumbai"
+              placeholder={t('rentBike.pickupAreaPlaceholder', 'e.g. Bandra West, Mumbai')}
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.pickupLocation && <Text style={styles.errorText}>{errors.pickupLocation}</Text>}
@@ -239,7 +244,7 @@ export default function StepRentalInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Pickup Timings <Text style={styles.req}>*</Text>
+            {t('rentBike.pickupTimingsLabel', 'Pickup Timings')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.pickupTimings && styles.inputError]}>
             <Clock size={18} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -247,8 +252,9 @@ export default function StepRentalInfo({
               style={styles.textInput}
               value={data.pickupTimings}
               onChangeText={(val) => onChange('pickupTimings', val)}
-              placeholder="e.g. 08:00 AM - 08:00 PM"
+              placeholder={t('rentBike.pickupTimingsPlaceholder', 'e.g. 08:00 AM - 08:00 PM')}
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.pickupTimings && <Text style={styles.errorText}>{errors.pickupTimings}</Text>}
@@ -257,17 +263,18 @@ export default function StepRentalInfo({
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Detailed Pickup Address & Landmark <Text style={styles.req}>*</Text>
+          {t('rentBike.detailedAddressLabel', 'Detailed Pickup Address & Landmark')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={[styles.inputBox, styles.textAreaBox, errors.pickupAddress && styles.inputError]}>
           <TextInput
             style={[styles.textInput, styles.textAreaInput]}
             value={data.pickupAddress}
             onChangeText={(val) => onChange('pickupAddress', val)}
-            placeholder="Complete address for key handover and vehicle inspection (revealed to renter only after booking is paid and verified)"
+            placeholder={t('rentBike.detailedAddressPlaceholder', 'Complete address for key handover and vehicle inspection (revealed to renter only after booking is paid and verified)')}
             placeholderTextColor={COLORS.textMuted}
             multiline
             numberOfLines={2}
+            selectTextOnFocus={true}
           />
         </View>
         {errors.pickupAddress && <Text style={styles.errorText}>{errors.pickupAddress}</Text>}
@@ -280,7 +287,7 @@ export default function StepRentalInfo({
             <Truck size={20} color="#38BDF8" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.deliveryTitle}>Doorstep Delivery to Renter Available?</Text>
+            <Text style={styles.deliveryTitle}>{t('rentBike.deliveryLabel', 'Doorstep Delivery to Renter Available?')}</Text>
             <Text style={styles.deliverySub}>
               Offer convenient doorstep delivery & pickup within 15 km radius for an extra fee.
             </Text>
@@ -297,7 +304,7 @@ export default function StepRentalInfo({
 
       {/* Rental Rules & Conditions */}
       <View style={styles.rulesSection}>
-        <Text style={styles.label}>Rental Rules & Policies</Text>
+        <Text style={styles.label}>{t('rentBike.rulesTitle', 'Rental Rules & Policies')}</Text>
         <Text style={styles.rulesSectionSub}>
           Select pre-defined platform guidelines and add your vehicle-specific instructions:
         </Text>

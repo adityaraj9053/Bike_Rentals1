@@ -25,6 +25,7 @@ import {
   Palette,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const BRANDS = [
   'Royal Enfield',
@@ -67,6 +68,7 @@ export default function StepBikeInfo({
   errors,
   onShowToast,
 }) {
+  const { t, isHindi } = useLanguage();
   const [uploadingSlot, setUploadingSlot] = useState(null);
 
   const handleSimulatePhotoUpload = (slotKey) => {
@@ -98,11 +100,11 @@ export default function StepBikeInfo({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>STEP 2 OF 5</Text>
+          <Text style={styles.badgeText}>{t('rentBike.bikeStepBadge', 'STEP 2 OF 5')}</Text>
         </View>
-        <Text style={styles.sectionTitle}>Bike Information & Photographs</Text>
+        <Text style={styles.sectionTitle}>{t('rentBike.bikeTitle', 'Motorcycle Information')}</Text>
         <Text style={styles.sectionSub}>
-          Provide exact specifications matching your vehicle Registration Certificate (RC) and high-quality exterior photos.
+          {t('rentBike.bikeSub', 'Accurate model details, manufacturing specifications, and high-definition exterior photographs.')}
         </Text>
       </View>
 
@@ -110,7 +112,7 @@ export default function StepBikeInfo({
       <View style={styles.gridTwo}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Bike Brand <Text style={styles.req}>*</Text>
+            {t('rentBike.brandLabel', 'Bike Brand')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={styles.pillSelectorRow}>
             {BRANDS.slice(0, 6).map((brand) => {
@@ -143,7 +145,7 @@ export default function StepBikeInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Bike Model <Text style={styles.req}>*</Text>
+            {t('rentBike.modelLabel', 'Bike Model')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.model && styles.inputError]}>
             <Bike size={18} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -151,8 +153,9 @@ export default function StepBikeInfo({
               style={styles.textInput}
               value={data.model}
               onChangeText={(val) => onChange('model', val)}
-              placeholder="e.g. Himalayan 450 / Duke 390"
+              placeholder={t('rentBike.modelPlaceholder', 'e.g. Himalayan 450 / Duke 390')}
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.model && <Text style={styles.errorText}>{errors.model}</Text>}
@@ -163,7 +166,7 @@ export default function StepBikeInfo({
       <View style={styles.gridTwo}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Manufacturing Year <Text style={styles.req}>*</Text>
+            {t('rentBike.yearLabel', 'Manufacturing Year')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={styles.pillSelectorRow}>
             {YEARS.slice(0, 5).map((yr) => {
@@ -189,16 +192,17 @@ export default function StepBikeInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Registration Number (RTO) <Text style={styles.req}>*</Text>
+            {t('rentBike.regLabel', 'Registration Number (RTO)')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.registrationNumber && styles.inputError]}>
             <TextInput
               style={[styles.textInput, { fontWeight: '700', letterSpacing: 1.2 }]}
               value={data.registrationNumber}
               onChangeText={(val) => onChange('registrationNumber', val.toUpperCase())}
-              placeholder="e.g. MH 02 FJ 9042"
+              placeholder={t('rentBike.regPlaceholder', 'e.g. MH 02 FJ 9042')}
               placeholderTextColor={COLORS.textMuted}
               autoCapitalize="characters"
+              selectTextOnFocus={true}
             />
           </View>
           <Text style={styles.fieldHelper}>Enter state code, RTO district code, and 4-digit number</Text>
@@ -211,7 +215,7 @@ export default function StepBikeInfo({
       {/* Vehicle Category */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Vehicle Category <Text style={styles.req}>*</Text>
+          {t('rentBike.categoryLabel', 'Vehicle Category')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={styles.pillSelectorRow}>
           {CATEGORIES.map((cat) => {
@@ -238,7 +242,7 @@ export default function StepBikeInfo({
       <View style={styles.gridFour}>
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Engine (CC) <Text style={styles.req}>*</Text>
+            {t('rentBike.ccLabel', 'Engine (CC)')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.engineCapacity && styles.inputError]}>
             <Cpu size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -249,13 +253,14 @@ export default function StepBikeInfo({
               placeholder="e.g. 350"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="number-pad"
+              selectTextOnFocus={true}
             />
           </View>
           {errors.engineCapacity && <Text style={styles.errorText}>{errors.engineCapacity}</Text>}
         </View>
 
         <View style={styles.gridItem}>
-          <Text style={styles.label}>Fuel Type</Text>
+          <Text style={styles.label}>{t('rentBike.fuelLabel', 'Fuel Type')}</Text>
           <View style={styles.pillSelectorRow}>
             {['Petrol', 'Electric'].map((fuel) => {
               const isSelected = data.fuelType === fuel;
@@ -276,7 +281,7 @@ export default function StepBikeInfo({
         </View>
 
         <View style={styles.gridItem}>
-          <Text style={styles.label}>Transmission</Text>
+          <Text style={styles.label}>{t('rentBike.transLabel', 'Transmission')}</Text>
           <View style={styles.pillSelectorRow}>
             {['Manual', 'Automatic'].map((trans) => {
               const isSelected = data.transmission === trans;
@@ -298,7 +303,7 @@ export default function StepBikeInfo({
 
         <View style={styles.gridItem}>
           <Text style={styles.label}>
-            Bike Colour <Text style={styles.req}>*</Text>
+            {t('rentBike.colorLabel', 'Bike Colour')} <Text style={styles.req}>*</Text>
           </Text>
           <View style={[styles.inputBox, errors.colour && styles.inputError]}>
             <Palette size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
@@ -306,8 +311,9 @@ export default function StepBikeInfo({
               style={styles.textInput}
               value={data.colour}
               onChangeText={(val) => onChange('colour', val)}
-              placeholder="e.g. Matte Black"
+              placeholder={t('rentBike.colorPlaceholder', 'e.g. Matte Black')}
               placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
             />
           </View>
           {errors.colour && <Text style={styles.errorText}>{errors.colour}</Text>}
@@ -317,17 +323,18 @@ export default function StepBikeInfo({
       {/* Bike Description */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>
-          Bike Description & Condition Notes <Text style={styles.req}>*</Text>
+          {t('rentBike.descLabel', 'Bike Description & Condition Notes')} <Text style={styles.req}>*</Text>
         </Text>
         <View style={[styles.inputBox, styles.textAreaBox, errors.description && styles.inputError]}>
           <TextInput
             style={[styles.textInput, styles.textAreaInput]}
             value={data.description}
             onChangeText={(val) => onChange('description', val)}
-            placeholder="Highlight vehicle condition, modifications, recent servicing, included accessories (touring visor, crash guard, saddle stays), and ideal rider profile..."
+            placeholder={t('rentBike.descPlaceholder', 'Highlight vehicle condition, modifications, recent servicing, included accessories (touring visor, crash guard, saddle stays), and ideal rider profile...')}
             placeholderTextColor={COLORS.textMuted}
             multiline
             numberOfLines={3}
+            selectTextOnFocus={true}
           />
         </View>
         {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
@@ -338,10 +345,10 @@ export default function StepBikeInfo({
         <View style={styles.photoHeader}>
           <View>
             <Text style={styles.photoSectionTitle}>
-              Required Bike Photographs <Text style={styles.req}>*</Text>
+              {t('rentBike.photosTitle', 'Required Bike Photographs')} <Text style={styles.req}>*</Text>
             </Text>
             <Text style={styles.photoSectionSub}>
-              All 4 high-definition exterior angles are mandatory for verification and listing approval.
+              {t('rentBike.photosSub', 'All 4 high-definition exterior angles are mandatory for verification and listing approval.')}
             </Text>
           </View>
 
@@ -360,10 +367,10 @@ export default function StepBikeInfo({
         {/* 4 Image Slots Grid */}
         <View style={styles.photosGrid}>
           {[
-            { key: 'front', label: 'Front View', hint: 'Headlamp, handlebars, number plate' },
-            { key: 'rear', label: 'Rear View', hint: 'Tail lamp, exhaust, rear tire' },
-            { key: 'left', label: 'Left Side View', hint: 'Full body profile, chain & saree guard' },
-            { key: 'right', label: 'Right Side View', hint: 'Silencer exhaust, foot pegs, brakes' },
+            { key: 'front', label: t('rentBike.frontView', 'Front View'), hint: 'Headlamp, handlebars, number plate' },
+            { key: 'rear', label: t('rentBike.rearView', 'Rear View'), hint: 'Tail lamp, exhaust, rear tire' },
+            { key: 'left', label: t('rentBike.leftView', 'Left-Side View'), hint: 'Full body profile, chain & saree guard' },
+            { key: 'right', label: t('rentBike.rightView', 'Right-Side View'), hint: 'Silencer exhaust, foot pegs, brakes' },
           ].map((slot) => {
             const photoUrl = data.images?.[slot.key];
             const isUploading = uploadingSlot === slot.key;

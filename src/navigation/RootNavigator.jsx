@@ -37,6 +37,7 @@ function BottomTabNavigator({
   onOpenBookModal,
   onShowToast,
   onBikeSubmitted,
+  onRentBikePress,
 }) {
   const { t } = useLanguage();
 
@@ -50,6 +51,7 @@ function BottomTabNavigator({
             onOpenAuth={onOpenAuth}
             onOpenWhatsApp={() => onOpenWhatsApp()}
             onStartBooking={() => onStartBooking && onStartBooking()}
+            onRentBikePress={onRentBikePress}
           />
         ),
         tabBarStyle: {
@@ -83,6 +85,7 @@ function BottomTabNavigator({
             onStartBooking={onStartBooking}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookModal={onOpenBookModal}
+            onRentBikePress={onRentBikePress}
           />
         )}
       </Tab.Screen>
@@ -111,10 +114,24 @@ function BottomTabNavigator({
           tabBarLabel: 'Rent Bike',
           tabBarIcon: ({ color }) => <Sparkles size={22} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            if (!user) {
+              e.preventDefault();
+              if (onRentBikePress) {
+                onRentBikePress();
+              } else if (onOpenAuth) {
+                onOpenAuth();
+              }
+            }
+          },
+        })}
       >
         {(props) => (
           <RentBikeScreen
             {...props}
+            user={user}
+            onOpenAuth={onOpenAuth}
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
           />
@@ -169,6 +186,7 @@ export default function RootNavigator({
   onShowToast,
   sharedBikes,
   onBikeSubmitted,
+  onRentBikePress,
 }) {
   const { t } = useLanguage();
 
@@ -192,6 +210,7 @@ export default function RootNavigator({
             onOpenBookModal={onOpenBookModal}
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
+            onRentBikePress={onRentBikePress}
           />
         )}
       </Stack.Screen>
@@ -205,6 +224,8 @@ export default function RootNavigator({
         {(props) => (
           <RentBikeScreen
             {...props}
+            user={user}
+            onOpenAuth={onOpenAuth}
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
           />
