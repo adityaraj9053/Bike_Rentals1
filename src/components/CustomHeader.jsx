@@ -80,15 +80,6 @@ export default function CustomHeader({
         </View>
 
         <View style={[styles.headerRight, isMobile && styles.headerRightMobile]}>
-          {/* Rent Your Bike Navigation Button */}
-          <TouchableOpacity
-            style={[styles.rentBikeBtn, isVerySmall && styles.rentBikeBtnSmall]}
-            onPress={handleRentBike}
-            activeOpacity={0.8}
-          >
-            <Sparkles size={12} color="#FFFFFF" />
-            <Text style={styles.rentBikeBtnText}>{isMobile ? 'Rent Bike' : 'Rent Your Bike'}</Text>
-          </TouchableOpacity>
 
           {/* Admin Dashboard Quick Access Button */}
           <TouchableOpacity
