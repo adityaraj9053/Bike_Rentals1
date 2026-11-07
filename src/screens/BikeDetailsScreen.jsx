@@ -124,12 +124,12 @@ export default function BikeDetailsScreen({
               {/* Price Tag */}
               <View style={styles.priceBox}>
                 <View style={styles.priceAmountRow}>
-                  <Text style={styles.priceNumber}>₹{bike.pricePerDay.toLocaleString()}</Text>
+                  <Text style={styles.priceNumber}>₹{(bike.pricePerDay ?? bike.dailyPrice ?? 1500).toLocaleString()}</Text>
                   <Text style={styles.perDayLabel}>/ day</Text>
                 </View>
                 <View style={styles.depositPill}>
                   <Text style={styles.depositPillText}>
-                    Refundable Deposit: ₹{bike.deposit.toLocaleString()}*
+                    Refundable Deposit: ₹{(bike.deposit ?? bike.securityDeposit ?? 3000).toLocaleString()}*
                   </Text>
                 </View>
               </View>
@@ -238,7 +238,7 @@ export default function BikeDetailsScreen({
                   <Text style={styles.guidelineTitle}>Security Deposit Policy</Text>
                 </View>
                 <Text style={styles.guidelineDesc}>
-                  {bike.guidelines?.deposit || `Refundable security deposit of ₹${bike.deposit.toLocaleString()}* refunded within 2 hours of return.`}
+                  {bike.guidelines?.deposit || `Refundable security deposit of ₹${(bike.deposit ?? bike.securityDeposit ?? 3000).toLocaleString()}* refunded within 2 hours of return.`}
                 </Text>
               </View>
             </View>
@@ -265,7 +265,7 @@ export default function BikeDetailsScreen({
                       {sb.name}
                     </Text>
                     <Text style={styles.similarPrice}>
-                      ₹{sb.pricePerDay.toLocaleString()}/day
+                      ₹{(sb.pricePerDay ?? sb.dailyPrice ?? 1500).toLocaleString()}/day
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -281,7 +281,7 @@ export default function BikeDetailsScreen({
           <View>
             <Text style={styles.stickyPriceLabel}>Daily Rental</Text>
             <Text style={styles.stickyPriceValue}>
-              ₹{bike.pricePerDay.toLocaleString()}
+              ₹{(bike.pricePerDay ?? bike.dailyPrice ?? 1500).toLocaleString()}
               <Text style={{ fontSize: 12, color: COLORS.textMuted }}> /day</Text>
             </Text>
           </View>

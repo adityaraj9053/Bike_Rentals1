@@ -38,6 +38,7 @@ function BottomTabNavigator({
   onShowToast,
   onBikeSubmitted,
   onRentBikePress,
+  sharedBikes,
 }) {
   const { t } = useLanguage();
 
@@ -86,6 +87,7 @@ function BottomTabNavigator({
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookModal={onOpenBookModal}
             onRentBikePress={onRentBikePress}
+            sharedBikes={sharedBikes}
           />
         )}
       </Tab.Screen>
@@ -104,6 +106,7 @@ function BottomTabNavigator({
             onStartBooking={onStartBooking}
             onOpenBookModal={onOpenBookModal}
             onOpenWhatsApp={onOpenWhatsApp}
+            sharedBikes={sharedBikes}
           />
         )}
       </Tab.Screen>
@@ -211,6 +214,7 @@ export default function RootNavigator({
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
             onRentBikePress={onRentBikePress}
+            sharedBikes={sharedBikes}
           />
         )}
       </Stack.Screen>
@@ -255,7 +259,6 @@ export default function RootNavigator({
             <CustomHeader
               navigation={navigation}
               showBack
-              title={route?.params?.bike?.name || 'Bike Details'}
               user={user}
               onOpenAuth={onOpenAuth}
               onOpenWhatsApp={() => onOpenWhatsApp(route?.params?.bike)}

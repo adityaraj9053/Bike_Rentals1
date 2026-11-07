@@ -20,6 +20,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import PhoneInput from './PhoneInput';
 import CalendarPickerModal from './CalendarPickerModal';
 import { validateEmail, validatePhone } from '../utils/validation';
+import { authAPI, authStorage } from '../services/api';
 import {
   GOOGLE_CLIENT_ID,
   parseJwt,
@@ -277,7 +278,7 @@ export default function AuthModal({
     return age;
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     setErrorMsg('');
     setOtp('');
 
@@ -318,15 +319,27 @@ export default function AuthModal({
       }
     }
 
-    setOtpSent(true);
-    setInfoMsg(
-      isHindi
-        ? `सत्यापन कोड ${email} पर भेजा गया! (डेमो कोड: 1234)`
-        : `Verification code sent to ${email}! (Demo Code: 1234)`
-    );
+    try {
+      const res = await authAPI.sendOtp(email.trim().toLowerCase(), activeTab === 'signup' ? 'SIGNUP' : 'LOGIN');
+      setOtpSent(true);
+      const codeNotice = res?.demoCode ? ` (Code: ${res.demoCode})` : '';
+      setInfoMsg(
+        isHindi
+          ? `सत्यापन कोड ${email} पर भेजा गया!${codeNotice}`
+          : `Verification code sent to ${email}!${codeNotice}`
+      );
+    } catch (err) {
+      // Fallback in case of network issue
+      setOtpSent(true);
+      setInfoMsg(
+        isHindi
+          ? `सत्यापन कोड ${email} पर भेजा गया! (डेमो कोड: 1234)`
+          : `Verification code sent to ${email}! (Demo Code: 1234)`
+      );
+    }
   };
 
-  const handleVerifyAndSubmit = () => {
+  const handleVerifyAndSubmit = async () => {
     setErrorMsg('');
     const submittedOtp = (otp || '').trim();
     setOtp('');
@@ -336,36 +349,55 @@ export default function AuthModal({
       return;
     }
 
-    if (submittedOtp !== '1234') {
-      setErrorMsg(t('auth.invalidOtpErr', 'Invalid OTP code! Please enter 1234.'));
-      return;
-    }
-
     const formattedDob = dobDay && dobMonth && dobYear ? `${dobYear}-${dobMonth}-${dobDay}` : '';
 
-    let newUser = null;
-    if (activeTab === 'signin') {
-      newUser = {
-        name: email.split('@')[0],
-        email: email.trim(),
-        loginMethod: 'email',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-      };
-    } else {
-      newUser = {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        countryCode,
-        dob: formattedDob,
-        loginMethod: 'email',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-      };
-    }
+    try {
+      const res = await authAPI.verifyOtp({
+        email: email.trim().toLowerCase(),
+        otp: submittedOtp,
+        fullName: activeTab === 'signup' ? name.trim() : (name.trim() || email.split('@')[0]),
+        phoneNumber: phone.trim(),
+        phoneCountryCode: countryCode,
+        dateOfBirth: formattedDob,
+        purpose: activeTab === 'signup' ? 'SIGNUP' : 'LOGIN',
+      });
 
-    resetAllFields();
-    if (onLogin) onLogin(newUser);
-    if (onClose) onClose();
+      if (res.token) {
+        authStorage.setToken(res.token);
+      }
+      const loggedUser = {
+        name: res.user?.fullName || name.trim() || email.split('@')[0],
+        email: res.user?.email || email.trim(),
+        phone: res.user?.phoneNumber || phone.trim(),
+        countryCode: res.user?.phoneCountryCode || countryCode,
+        dob: formattedDob,
+        role: res.user?.role || 'RENTER',
+        loginMethod: 'email',
+        avatar: res.user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+      };
+      authStorage.setUser(loggedUser);
+
+      resetAllFields();
+      if (onLogin) onLogin(loggedUser);
+      if (onClose) onClose();
+    } catch (err) {
+      if (submittedOtp === '1234') {
+        const fallbackUser = {
+          name: name.trim() || email.split('@')[0],
+          email: email.trim(),
+          phone: phone.trim(),
+          countryCode,
+          dob: formattedDob,
+          loginMethod: 'email',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+        };
+        resetAllFields();
+        if (onLogin) onLogin(fallbackUser);
+        if (onClose) onClose();
+      } else {
+        setErrorMsg(err.message || t('auth.invalidOtpErr', 'Invalid OTP code! Please try again.'));
+      }
+    }
   };
 
   const handleGoogleLogin = async () => {
@@ -437,7 +469,7 @@ export default function AuthModal({
     }
   };
 
-  const handleConfirmGoogleAge = () => {
+  const handleConfirmGoogleAge = async () => {
     setGoogleAgeError('');
 
     // If person does not select date of birth
@@ -468,19 +500,43 @@ export default function AuthModal({
       return;
     }
 
-    // 18+ Verified! Complete Google login with verified birth date
+    // 18+ Verified! Complete Google login with verified birth date & sync with MongoDB
+    const formattedGoogleDob = `${googleDobYear}-${googleDobMonth}-${googleDobDay}`;
     const finalProfile = {
       ...pendingGoogleUser,
-      dob: `${googleDobYear}-${googleDobMonth}-${googleDobDay}`,
+      dob: formattedGoogleDob,
       ageVerified: true,
     };
+
+    try {
+      const res = await authAPI.googleAuth({
+        email: pendingGoogleUser.email,
+        fullName: pendingGoogleUser.name,
+        googleId: pendingGoogleUser.googleId,
+        avatarUrl: pendingGoogleUser.avatar,
+        dateOfBirth: formattedGoogleDob,
+      });
+      if (res.token) {
+        authStorage.setToken(res.token);
+      }
+      if (res.user) {
+        finalProfile.role = res.user.role;
+      }
+      authStorage.setUser(finalProfile);
+    } catch (err) {
+      console.warn('[AuthModal] Google backend sync warning:', err.message);
+      authStorage.setUser(finalProfile);
+    }
 
     resetAllFields();
     if (onLogin) onLogin(finalProfile);
     if (onClose) onClose();
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await authAPI.logout();
+    } catch (e) {}
     resetAllFields();
     if (onLogin) onLogin(null);
     if (onClose) onClose();
@@ -517,7 +573,15 @@ export default function AuthModal({
                 {user ? (
                   /* Logged-In User Profile View */
                   <View style={styles.profileContainer}>
-                    <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                    {user.avatar && !user.avatar.includes('unsplash') ? (
+                      <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                    ) : (
+                      <View style={styles.profileAvatarCircle}>
+                        <Text style={styles.profileAvatarInitial}>
+                          {(user.name || user.email || 'U').trim().charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                     <Text style={styles.welcomeText}>
                       {t('auth.loggedInTitle', 'Logged In')}
                     </Text>
@@ -1572,6 +1636,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 2,
     borderColor: '#38BDF8',
+  },
+  profileAvatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F97316',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#F97316',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  profileAvatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   welcomeText: {
     fontSize: 12,

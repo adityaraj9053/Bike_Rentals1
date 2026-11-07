@@ -45,6 +45,12 @@ export default function CustomHeader({
     return isVerySmall ? first.slice(0, 5) : first.length > 8 ? `${first.slice(0, 7)}…` : first;
   };
 
+  const getUserInitial = () => {
+    if (!user) return 'U';
+    const name = (user.name || user.email || 'U').trim();
+    return name.charAt(0).toUpperCase() || 'U';
+  };
+
   return (
     <View style={styles.headerWrapper}>
       <View style={[styles.headerContainer, isMobile && styles.headerContainerMobile]}>
@@ -115,16 +121,31 @@ export default function CustomHeader({
           </TouchableOpacity>
 
           {/* User Account Button */}
-          <TouchableOpacity
-            style={[styles.userButton, isVerySmall && styles.userButtonSmall]}
-            onPress={onOpenAuth}
-            activeOpacity={0.8}
-          >
-            <User size={14} color={COLORS.accentCyan} />
-            <Text style={styles.userButtonText} numberOfLines={1}>
-              {getUserDisplayName()}
-            </Text>
-          </TouchableOpacity>
+          {user ? (
+            <TouchableOpacity
+              style={styles.userAvatarButton}
+              onPress={onOpenAuth}
+              activeOpacity={0.8}
+              accessibilityLabel={`User Account: ${user.name || 'User'}`}
+            >
+              <View style={styles.userAvatarCircle}>
+                <Text style={styles.userAvatarInitial}>
+                  {getUserInitial()}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.userButton, isVerySmall && styles.userButtonSmall]}
+              onPress={onOpenAuth}
+              activeOpacity={0.8}
+            >
+              <User size={14} color={COLORS.accentCyan} />
+              <Text style={styles.userButtonText} numberOfLines={1}>
+                {t('nav.login', 'Log In')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -244,7 +265,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerBookBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#ff0000ff',
     paddingHorizontal: 15,
     paddingVertical: 7,
     borderRadius: RADIUS.full,
@@ -308,5 +329,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     maxWidth: 72,
+  },
+  userAvatarButton: {
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F97316',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    shadowColor: '#F97316',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  userAvatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+    includeFontPadding: false,
+    lineHeight: 18,
   },
 });

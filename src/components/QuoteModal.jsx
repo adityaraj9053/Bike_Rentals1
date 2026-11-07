@@ -33,7 +33,7 @@ export default function QuoteModal({
           `Pickup: ${bookingData.pickupDate} (${bookingData.pickupTime})\n` +
           `Return: ${bookingData.returnDate} (${bookingData.returnTime})\n` +
           `Rental Duration: ${bookingData.days} Days\n` +
-          `Total Payable: ₹${(bookingData.rentalCharge + (bike.deposit || 0)).toLocaleString()}\n` +
+          `Total Payable: ₹${(bookingData.rentalCharge + (bike.deposit || bike.securityDeposit || 0)).toLocaleString()}\n` +
           `Mandatory at pickup: Driving licence, ID proof, 2 photos.`,
       });
     } catch {}
@@ -99,7 +99,7 @@ export default function QuoteModal({
                   <View style={styles.breakdownTable}>
                     <View style={styles.tableRow}>
                       <Text style={styles.colDesc}>
-                        Base Rental ({bookingData.days} Days @ ₹{bike.pricePerDay})
+                        Base Rental ({bookingData.days} Days @ ₹{bike.pricePerDay || bike.dailyPrice || 1500})
                       </Text>
                       <Text style={styles.colAmount}>
                         ₹{bookingData.rentalCharge?.toLocaleString()}
@@ -109,14 +109,14 @@ export default function QuoteModal({
                     <View style={styles.tableRow}>
                       <Text style={styles.colDesc}>Refundable Security Deposit*</Text>
                       <Text style={[styles.colAmount, { color: '#0284C7' }]}>
-                        ₹{bike.deposit?.toLocaleString()}
+                        ₹{(bike.deposit || bike.securityDeposit || 3000)?.toLocaleString()}
                       </Text>
                     </View>
 
                     <View style={[styles.tableRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total Estimated Payable</Text>
                       <Text style={styles.totalAmount}>
-                        ₹{(bookingData.rentalCharge + (bike.deposit || 0)).toLocaleString()}
+                        ₹{(bookingData.rentalCharge + (bike.deposit || bike.securityDeposit || 0)).toLocaleString()}
                       </Text>
                     </View>
                   </View>

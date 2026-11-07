@@ -21,12 +21,17 @@ export default function MotorbikesScreen({
   onStartBooking,
   onOpenBookModal,
   onOpenWhatsApp,
+  sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
   const initialCategory = route?.params?.initialCategory || 'all';
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest'); // 'newest', 'price-asc', 'price-desc', 'rating'
+
+  const activeFleet = useMemo(() => {
+    return sharedBikes && sharedBikes.length > 0 ? sharedBikes : BIKES_DATA;
+  }, [sharedBikes]);
 
   // Responsive Grid state & max-width container
   const { width: windowWidth } = useWindowDimensions();
@@ -62,21 +67,21 @@ export default function MotorbikesScreen({
   ];
 
   const filteredBikes = useMemo(() => {
-    let result = BIKES_DATA.filter((b) => {
+    let result = activeFleet.filter((b) => {
       const matchCategory = selectedCategory === 'all' || b.categoryKey === selectedCategory;
       const matchSearch =
-        b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.category.toLowerCase().includes(searchQuery.toLowerCase());
+        (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.model || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.category || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchCategory && matchSearch;
     });
 
     if (sortBy === 'price-asc') {
-      result.sort((a, b) => a.pricePerDay - b.pricePerDay);
+      result.sort((a, b) => (a.pricePerDay ?? a.dailyPrice ?? 0) - (b.pricePerDay ?? b.dailyPrice ?? 0));
     } else if (sortBy === 'price-desc') {
-      result.sort((a, b) => b.pricePerDay - a.pricePerDay);
+      result.sort((a, b) => (b.pricePerDay ?? b.dailyPrice ?? 0) - (a.pricePerDay ?? a.dailyPrice ?? 0));
     } else if (sortBy === 'rating') {
-      result.sort((a, b) => b.rating - a.rating);
+      result.sort((a, b) => (b.rating ?? 4.9) - (a.rating ?? 4.9));
     }
 
     return result;

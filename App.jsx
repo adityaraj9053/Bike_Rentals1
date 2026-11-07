@@ -1,4 +1,4 @@
-import React, { useState, useRef, Component } from 'react';
+import React, { useState, useRef, Component, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -20,6 +20,7 @@ import Toast from './src/components/Toast';
 import { BIKES_DATA } from './src/data/bikes';
 import { INITIAL_BIKE_LISTINGS } from './src/data/marketplaceData';
 import { COLORS } from './src/theme/colors';
+import { authStorage, authAPI, bikesAPI } from './src/services/api';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -120,7 +121,85 @@ export default function App() {
   };
 
   // Shared Marketplace State for listings submitted via "Rent Your Bike"
-  const [sharedBikes, setSharedBikes] = useState(INITIAL_BIKE_LISTINGS);
+  const [sharedBikes, setSharedBikes] = useState(BIKES_DATA);
+
+  useEffect(() => {
+    // 1. Restore auth user from storage or API
+    const cachedUser = authStorage.getUser();
+    if (cachedUser) {
+      setUser(cachedUser);
+    }
+    const token = authStorage.getToken();
+    if (token) {
+      authAPI
+        .getMe()
+        .then((res) => {
+          if (res?.user) {
+            const updated = {
+              ...cachedUser,
+              name: res.user.fullName,
+              email: res.user.email,
+              role: res.user.role,
+              avatar: res.user.avatarUrl || cachedUser?.avatar,
+            };
+            setUser(updated);
+            authStorage.setUser(updated);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 2. Fetch live fleet from MongoDB
+    bikesAPI
+      .getAll({ includeAll: 'true' })
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          // Normalize DB bikes with UI fields
+          const formatted = res.data.map((b) => ({
+            id: b.listingCode || b._id,
+            name: `${b.brand} ${b.model}`,
+            model: b.model,
+            brand: b.brand,
+            category: b.category,
+            categoryKey: (b.category || '').toLowerCase().includes('cruiser')
+              ? 'cruiser'
+              : (b.category || '').toLowerCase().includes('sport')
+              ? 'sports'
+              : (b.category || '').toLowerCase().includes('adventure')
+              ? 'adventure'
+              : 'commuter',
+            tagline: b.description || 'Verified Machine with full inspection',
+            pricePerDay: b.dailyPrice || 1500,
+            dailyPrice: b.dailyPrice || 1500,
+            deposit: b.securityDeposit || 3000,
+            securityDeposit: b.securityDeposit || 3000,
+            rating: b.ownerId?.ownerRating || 4.9,
+            reviewsCount: 124,
+            badge: b.status === 'APPROVED' ? 'VERIFIED' : 'PENDING REVIEW',
+            badgeType: 'premium',
+            availability: b.isAvailable ? 'Available for immediate booking' : 'Currently Booked',
+            statusBadge: b.status,
+            isFeatured: true,
+            image: b.photos?.front || b.photos?.thumbnail,
+            imageSource: b.photos?.front ? { uri: b.photos.front } : undefined,
+            gallery: [b.photos?.front, b.photos?.rear, b.photos?.left, b.photos?.right].filter(Boolean),
+            specs: b.specs || {},
+            features: b.features || [],
+            guidelines: b.guidelines || {},
+            registrationNumber: b.registrationNumber,
+            pickupAddress: b.pickupAddress,
+            _id: b._id,
+          }));
+          setSharedBikes(formatted);
+          if (formatted.length > 0) {
+            setSelectedBike(formatted[0]);
+          }
+        }
+      })
+      .catch((err) => {
+        console.log('[App] Using initial fleet data:', err.message);
+      });
+  }, []);
 
   const handleBikeSubmitted = (newBike) => {
     setSharedBikes((prev) => [newBike, ...prev]);

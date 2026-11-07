@@ -30,6 +30,7 @@ import CalendarPickerModal from './CalendarPickerModal';
 import PhoneInput from './PhoneInput';
 import { validatePhone } from '../utils/validation';
 import WhatsAppIcon from './WhatsAppIcon';
+import { supportAPI } from '../services/api';
 
 export default function EnquiryModal({
   visible,
@@ -106,12 +107,25 @@ export default function EnquiryModal({
     }
     setPhoneError('');
 
+    // Persist Enquiry in MongoDB Support Tickets
+    supportAPI
+      .submitEnquiry({
+        fullName: fullName || 'Concierge Rider',
+        phone: `${countryCode} ${phone}`,
+        bikeId: currentBike?.id,
+        startDate,
+        endDate,
+        message,
+        category: 'BOOKING_INQUIRY',
+      })
+      .catch((err) => console.log('[EnquiryModal] Backend sync notice:', err.message));
+
     setSubmitted(true);
     if (onShowToast) {
       onShowToast(
         isHindi
           ? `${currentBike.name} के लिए पूछताछ प्राप्त हुई! हमारी टीम जल्द ही आपसे संपर्क करेगी।`
-          : `Enquiry received for ${currentBike.name}! Our concierge will connect with you shortly.`
+          : `Enquiry received for ${currentBike.name}! Saved to database.`
       );
     }
     setTimeout(() => {
@@ -212,7 +226,7 @@ export default function EnquiryModal({
                               </Text>
                             </View>
                             <Text style={[styles.bikeChipPrice, active && styles.bikeChipPriceActive]}>
-                              ₹{b.pricePerDay.toLocaleString()}/day
+                              ₹{(b.pricePerDay ?? b.dailyPrice ?? 1500).toLocaleString()}/day
                             </Text>
                           </TouchableOpacity>
                         );

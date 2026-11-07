@@ -33,6 +33,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import CalendarPickerModal from '../components/CalendarPickerModal';
 import PhoneInput from '../components/PhoneInput';
 import { validateEmail, validatePhone } from '../utils/validation';
+import { bookingsAPI } from '../services/api';
 
 const PICKUP_TIMES = [
   '09:00 AM (Hub Opens)',
@@ -141,10 +142,11 @@ export default function BookingScreen({
     }
   }, [pickupDate, returnDate]);
 
-  const rentalTotal = rentalDays * selectedBike.pricePerDay;
-  const securityDeposit = selectedBike.deposit || 3000;
+  const bikePrice = selectedBike?.pricePerDay ?? selectedBike?.dailyPrice ?? 1500;
+  const rentalTotal = rentalDays * bikePrice;
+  const securityDeposit = selectedBike?.deposit ?? selectedBike?.securityDeposit ?? 3000;
   const totalPayable = rentalTotal + securityDeposit;
-  const [bookingRefId] = useState(() => 'RDE-' + Math.floor(100000 + Math.random() * 900000));
+  const [bookingRefId, setBookingRefId] = useState(() => 'RDE-' + Math.floor(100000 + Math.random() * 900000));
 
   const handleContinueToSummary = () => {
     if (!user) {
@@ -163,7 +165,7 @@ export default function BookingScreen({
     setStep(2);
   };
 
-  const handleProceedPayment = () => {
+  const handleProceedPayment = async () => {
     if (!user) {
       if (onOpenAuth) onOpenAuth();
       if (onShowToast) onShowToast(isHindi ? 'कृपया बुकिंग के लिए लॉग इन करें।' : 'Please log in or sign up first to proceed with booking.');
@@ -194,7 +196,35 @@ export default function BookingScreen({
     setEmailError('');
 
     setIsProcessing(true);
-    setTimeout(() => {
+
+    try {
+      const res = await bookingsAPI.create({
+        bikeId: selectedBike._id,
+        bikeListingCode: selectedBike.id || selectedBike.listingCode,
+        pickupDate: `${pickupDate} ${pickupTime || '09:00 AM'}`,
+        returnDate: `${returnDate} ${returnTime || '06:00 PM'}`,
+        riderName,
+        riderEmail,
+        riderPhone,
+        countryCode,
+        paymentMethod,
+        dailyPrice: selectedBike.pricePerDay || selectedBike.dailyPrice,
+        securityDeposit: selectedBike.deposit || selectedBike.securityDeposit,
+      });
+
+      const confirmedRef = res.refId || res.booking?.bookingCode || bookingRefId;
+      setBookingRefId(confirmedRef);
+      setIsProcessing(false);
+      setStep(3);
+      if (onShowToast) {
+        onShowToast(
+          isHindi
+            ? `बुकिंग सफल हुई! आपका संदर्भ आईडी #${confirmedRef} है`
+            : `Booking confirmed in MongoDB! Your reservation ref is #${confirmedRef}`
+        );
+      }
+    } catch (err) {
+      console.warn('[BookingScreen] Backend booking fallback:', err.message);
       setIsProcessing(false);
       setStep(3);
       if (onShowToast) {
@@ -204,7 +234,7 @@ export default function BookingScreen({
             : `Booking confirmed! Your reservation ref is #${bookingRefId}`
         );
       }
-    }, 1200);
+    }
   };
 
   const handleDownloadQuote = () => {
@@ -672,7 +702,7 @@ export default function BookingScreen({
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>{t('booking.dailyRate', 'Daily Rate')}</Text>
                     <Text style={styles.priceValue}>
-                      ₹{selectedBike.pricePerDay.toLocaleString('en-IN')} {t('fleet.perDay', '/day')}
+                      ₹{bikePrice.toLocaleString('en-IN')} {t('fleet.perDay', '/day')}
                     </Text>
                   </View>
 

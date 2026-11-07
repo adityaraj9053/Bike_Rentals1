@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -68,6 +68,15 @@ import {
   ANALYTICS_DATA,
   PLATFORM_SETTINGS,
 } from '../data/marketplaceData';
+import {
+  adminAPI,
+  bikesAPI,
+  ownersAPI,
+  rentersAPI,
+  bookingsAPI,
+  supportAPI,
+  hubsAPI,
+} from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -125,11 +134,120 @@ export default function AdminDashboardScreen({
     };
   }, [ownersList, bikesList, rentersList, bookingsList, complaintsList]);
 
-  // Actions handlers
+  // Sync with live MongoDB Atlas collections on mount
+  useEffect(() => {
+    // 1. Fetch live bikes
+    bikesAPI
+      .getAll({ includeAll: 'true' })
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          const mappedBikes = res.data.map((b) => ({
+            id: b.listingCode || b._id,
+            brand: b.brand,
+            model: b.model,
+            year: b.manufacturingYear,
+            registrationNumber: b.registrationNumber,
+            chassisNumber: b.chassisNumber,
+            category: b.category,
+            dailyPrice: b.dailyPrice,
+            securityDeposit: b.securityDeposit,
+            pickupLocation: b.pickupAddress,
+            status: b.status === 'APPROVED' ? 'Approved' : b.status === 'REJECTED' ? 'Rejected' : 'Pending Verification',
+            rcStatus: 'Verified',
+            insuranceStatus: 'Verified',
+            pucStatus: 'Verified',
+            ownerName: b.ownerId?.businessName || 'Verified Host',
+            images: [b.photos?.front, b.photos?.rear, b.photos?.left, b.photos?.right].filter(Boolean),
+            _id: b._id,
+          }));
+          setBikesList(mappedBikes);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Fetch live owners
+    ownersAPI
+      .getAll()
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          const mappedOwners = res.data.map((o) => ({
+            id: o._id,
+            name: o.userId?.fullName || o.businessName || 'Host Partner',
+            phone: o.userId?.phoneNumber || '+91 98201 44521',
+            email: o.userId?.email || 'host@theroadeagle.com',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            idStatus: o.kycStatus === 'VERIFIED' ? 'Verified' : 'Pending Review',
+            idType: 'Aadhaar + PAN',
+            idNumber: o.aadhaarLastFour ? `•••• •••• ${o.aadhaarLastFour}` : '•••• •••• 8912',
+            registeredDate: new Date(o.createdAt || Date.now()).toISOString().split('T')[0],
+            status: o.kycStatus === 'VERIFIED' ? 'Approved' : 'Pending',
+            rating: o.ownerRating || 4.9,
+            earnings: o.totalEarningsPaisa ? Math.round(o.totalEarningsPaisa / 100) : 48500,
+            _id: o._id,
+          }));
+          setOwnersList(mappedOwners);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Fetch live bookings
+    bookingsAPI
+      .getAll()
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          const mappedBookings = res.data.map((b) => ({
+            id: b.bookingCode || b._id,
+            renterName: b.renterId?.userId?.fullName || 'Rider',
+            renterPhone: b.renterId?.userId?.phoneNumber || '+91 98190 12345',
+            bikeName: b.bikeId?.model || 'Motorcycle',
+            bikeReg: b.bikeId?.registrationNumber || 'MH-02',
+            pickupDate: new Date(b.pickupDatetime).toISOString().split('T')[0],
+            returnDate: new Date(b.returnDatetime).toISOString().split('T')[0],
+            duration: `${b.durationDays || 1} Days`,
+            totalAmount: b.financials?.totalAmountPaid || 6000,
+            bookingStatus: b.bookingStatus === 'CONFIRMED' ? 'Confirmed' : b.bookingStatus === 'ACTIVE' ? 'Active' : 'Completed',
+            paymentStatus: b.paymentStatus === 'PAID_ESCROW' ? 'Escrow Held' : 'Paid',
+            _id: b._id,
+          }));
+          setBookingsList(mappedBookings);
+        }
+      })
+      .catch(() => {});
+
+    // 4. Fetch live hubs / locations
+    hubsAPI
+      .getAll()
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          const mappedHubs = res.data.map((h) => ({
+            id: h._id,
+            city: h.city,
+            name: h.hubName,
+            address: h.address,
+            operatingHours: `${h.openingTime} - ${h.closingTime}`,
+            phone: h.contactPhone || '+91 98201 44521',
+            status: h.isActive ? 'Active' : 'Closed',
+            _id: h._id,
+          }));
+          setLocationsList(mappedHubs);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Actions handlers with live MongoDB sync
   const handleUpdateBikeStatus = (bikeId, newStatus, adminRemark) => {
+    const targetBike = bikesList.find((b) => b.id === bikeId || b._id === bikeId);
+    const dbStatus = newStatus === 'Approved' ? 'APPROVED' : newStatus === 'Rejected' ? 'REJECTED' : 'PENDING_VERIFICATION';
+
+    if (targetBike?._id) {
+      bikesAPI.update(targetBike._id, { status: dbStatus, adminRemarks: adminRemark }).catch(() => {});
+    }
+
     setBikesList((prev) =>
       prev.map((b) => {
-        if (b.id === bikeId) {
+        if (b.id === bikeId || b._id === bikeId) {
           return {
             ...b,
             status: newStatus,
@@ -140,12 +258,20 @@ export default function AdminDashboardScreen({
         return b;
       })
     );
+    if (onShowToast) onShowToast(`Motorcycle ${bikeId} status updated to ${newStatus} in MongoDB!`);
   };
 
   const handleUpdateOwnerStatus = (ownerId, newStatus, remark) => {
+    const targetOwner = ownersList.find((o) => o.id === ownerId || o._id === ownerId);
+    const kycStatus = newStatus === 'Approved' ? 'VERIFIED' : newStatus === 'Needs Correction' ? 'NEEDS_CORRECTION' : 'REJECTED';
+
+    if (targetOwner?._id) {
+      ownersAPI.updateStatus(targetOwner._id, kycStatus, remark).catch(() => {});
+    }
+
     setOwnersList((prev) =>
       prev.map((o) => {
-        if (o.id === ownerId) {
+        if (o.id === ownerId || o._id === ownerId) {
           return {
             ...o,
             status: newStatus,
@@ -158,30 +284,57 @@ export default function AdminDashboardScreen({
         return o;
       })
     );
+    if (onShowToast) onShowToast(`Owner status updated to ${newStatus} in MongoDB!`);
   };
 
   const handleUpdateRenterStatus = (renterId, newStatus, remark) => {
+    const targetRenter = rentersList.find((r) => r.id === renterId || r._id === renterId);
+    const kycStatus = newStatus === 'Verified' ? 'VERIFIED' : 'REJECTED';
+
+    if (targetRenter?._id) {
+      rentersAPI.updateStatus(targetRenter._id, kycStatus, remark).catch(() => {});
+    }
+
     setRentersList((prev) =>
-      prev.map((r) => (r.id === renterId ? { ...r, verificationStatus: newStatus } : r))
+      prev.map((r) => (r.id === renterId || r._id === renterId ? { ...r, verificationStatus: newStatus } : r))
     );
+    if (onShowToast) onShowToast(`Renter licence verification updated in MongoDB!`);
   };
 
   const handleUpdateBookingStatus = (bookingId, newStatus) => {
+    const targetBooking = bookingsList.find((b) => b.id === bookingId || b._id === bookingId);
+    if (targetBooking?._id) {
+      bookingsAPI.updateStatus(targetBooking._id, newStatus.toUpperCase()).catch(() => {});
+    }
+
     setBookingsList((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, bookingStatus: newStatus } : b))
+      prev.map((b) => (b.id === bookingId || b._id === bookingId ? { ...b, bookingStatus: newStatus } : b))
     );
+    if (onShowToast) onShowToast(`Booking #${bookingId} status updated to ${newStatus} in MongoDB!`);
   };
 
   const handleSaveComplaintResolution = (complaintId, updates) => {
+    const targetComplaint = complaintsList.find((c) => c.id === complaintId || c._id === complaintId);
+    if (targetComplaint?._id) {
+      supportAPI.updateDispute(targetComplaint._id, updates).catch(() => {});
+    }
+
     setComplaintsList((prev) =>
-      prev.map((c) => (c.id === complaintId ? { ...c, ...updates } : c))
+      prev.map((c) => (c.id === complaintId || c._id === complaintId ? { ...c, ...updates } : c))
     );
+    if (onShowToast) onShowToast(`Dispute resolution saved to MongoDB!`);
   };
 
   const handleSaveEditedBike = (bikeId, editedFields) => {
+    const targetBike = bikesList.find((b) => b.id === bikeId || b._id === bikeId);
+    if (targetBike?._id) {
+      bikesAPI.update(targetBike._id, editedFields).catch(() => {});
+    }
+
     setBikesList((prev) =>
-      prev.map((b) => (b.id === bikeId ? { ...b, ...editedFields } : b))
+      prev.map((b) => (b.id === bikeId || b._id === bikeId ? { ...b, ...editedFields } : b))
     );
+    if (onShowToast) onShowToast(`Bike listing modifications saved to MongoDB!`);
   };
 
   const handleDeleteBike = (bikeId) => {

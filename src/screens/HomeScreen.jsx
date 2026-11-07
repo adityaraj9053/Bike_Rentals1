@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -42,12 +42,17 @@ export default function HomeScreen({
   onOpenWhatsApp,
   onOpenBookModal,
   onRentBikePress,
+  sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
   const carouselScrollRef = useRef(null);
   const [carouselOffset, setCarouselOffset] = useState(0);
+
+  const activeFleet = useMemo(() => {
+    return sharedBikes && sharedBikes.length > 0 ? sharedBikes : BIKES_DATA;
+  }, [sharedBikes]);
 
   const toggleFaq = (idx) => {
     setOpenFaqIndex(openFaqIndex === idx ? null : idx);
@@ -62,7 +67,7 @@ export default function HomeScreen({
     setCarouselOffset(nextX);
   };
 
-  const filteredBikes = BIKES_DATA.filter((b) => {
+  const filteredBikes = activeFleet.filter((b) => {
     if (selectedCategory === 'all') return true;
     return b.categoryKey === selectedCategory;
   });

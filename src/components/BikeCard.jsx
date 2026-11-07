@@ -21,7 +21,20 @@ export default function BikeCard({
   compact = false,
 }) {
   const { t, isHindi } = useLanguage();
+  if (!bike) return null;
+
   const isLimited = bike.statusBadge === 'LIMITED';
+  const price = Number(bike.pricePerDay ?? bike.dailyPrice ?? 0);
+  const deposit = Number(bike.deposit ?? bike.securityDeposit ?? 0);
+  const bikeName = bike.name || `${bike.brand || ''} ${bike.model || 'Motorcycle'}`.trim();
+  const bikeModel = bike.model || '';
+  const rating = bike.rating || 4.9;
+  const reviewsCount = bike.reviews || bike.reviewsCount || 142;
+  const imageSource =
+    bike.imageSource ||
+    (typeof bike.image === 'string' ? { uri: bike.image } : bike.image) ||
+    (bike.photos?.front ? { uri: bike.photos.front } : null) ||
+    require('../assets/hero.png');
 
   return (
     <View style={[styles.card, SHADOWS.card, compact && styles.cardCompact, style]}>
@@ -32,7 +45,7 @@ export default function BikeCard({
         style={[styles.imageContainer, compact && styles.imageContainerCompact]}
       >
         <Image
-          source={bike.imageSource}
+          source={imageSource}
           style={styles.bikeImage}
           resizeMode="cover"
         />
@@ -70,12 +83,12 @@ export default function BikeCard({
       <View style={[styles.content, compact && styles.contentCompact]}>
         <View style={styles.titleRow}>
           <Text style={[styles.bikeName, compact && styles.bikeNameCompact]} numberOfLines={1}>
-            {bike.name}
+            {bikeName}
           </Text>
         </View>
 
         <Text style={[styles.bikeModel, compact && styles.bikeModelCompact]} numberOfLines={1}>
-          {bike.model}
+          {bikeModel}
         </Text>
 
         {/* Rating and Reviews */}
@@ -91,10 +104,10 @@ export default function BikeCard({
             ))}
           </View>
           <Text style={[styles.ratingText, compact && styles.ratingTextCompact]}>
-            {bike.rating}
+            {rating}
           </Text>
           <Text style={[styles.reviewCount, compact && styles.reviewCountCompact]}>
-            ({bike.reviews})
+            ({reviewsCount})
           </Text>
         </View>
 
@@ -136,14 +149,14 @@ export default function BikeCard({
                 {t('fleet.from', 'from')}{' '}
               </Text>
               <Text style={[styles.priceValue, compact && styles.priceValueCompact]}>
-                ₹{bike.pricePerDay.toLocaleString('en-IN')}
+                ₹{price.toLocaleString('en-IN')}
               </Text>
               <Text style={[styles.perDayLabel, compact && styles.perDayLabelCompact]}>
                 {t('fleet.perDay', '/day')}
               </Text>
             </View>
             <Text style={[styles.inrSubtext, compact && styles.inrSubtextCompact]}>
-              {isHindi ? 'डिपॉजिट' : 'Deposit'} ₹{bike.deposit.toLocaleString('en-IN')}
+              {isHindi ? 'डिपॉजिट' : 'Deposit'} ₹{deposit.toLocaleString('en-IN')}
             </Text>
           </View>
 
