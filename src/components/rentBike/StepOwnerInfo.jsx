@@ -206,14 +206,14 @@ export default function StepOwnerInfo({
           <Text style={styles.label}>
             {t('rentBike.mobileLabel', 'Mobile Number')} <Text style={styles.req}>*</Text>
           </Text>
-          {data.mobileVerified ? (
+          {/* {data.mobileVerified ? (
             <View style={styles.verifiedTag}>
               <CheckCircle2 size={13} color="#10B981" />
               <Text style={styles.verifiedTagText}>{t('rentBike.mobileVerified', 'Mobile Verified')}</Text>
             </View>
           ) : (
             <Text style={styles.pendingTag}>{t('rentBike.otpReq', 'OTP Verification Required')}</Text>
-          )}
+          )} */}
         </View>
 
         <PhoneInput
@@ -229,63 +229,6 @@ export default function StepOwnerInfo({
         />
         {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
 
-        {/* Mobile OTP UI */}
-        {!data.mobileVerified && (
-          <View style={styles.otpCard}>
-            <View style={styles.otpCardHeader}>
-              <Clock size={15} color="#38BDF8" />
-              <Text style={styles.otpCardTitle}>{t('rentBike.mobileOtpTitle', 'Two-Step Mobile Verification')}</Text>
-            </View>
-
-            {!otpSent ? (
-              <TouchableOpacity
-                style={styles.sendOtpBtn}
-                onPress={handleSendMobileOtp}
-                activeOpacity={0.8}
-              >
-                <Send size={14} color="#FFFFFF" />
-                <Text style={styles.sendOtpBtnText}>{t('rentBike.sendOtpBtn', 'Send Mobile Verification OTP')}</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.otpInputArea}>
-                <Text style={styles.otpHint}>
-                  Enter the 4-digit OTP sent via SMS (Demo code: <Text style={styles.boldWhite}>4521</Text>):
-                </Text>
-                <View style={styles.otpInlineRow}>
-                  <TextInput
-                    style={styles.otpInput}
-                    value={enteredOtp}
-                    onChangeText={setEnteredOtp}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    placeholder="4521"
-                    placeholderTextColor="#64748B"
-                    selectTextOnFocus={true}
-                  />
-                  <TouchableOpacity
-                    style={styles.verifyOtpBtn}
-                    onPress={handleVerifyMobileOtp}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.verifyOtpBtnText}>{t('rentBike.verifyOtpBtn', 'Verify OTP')}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
-
-                <View style={styles.resendRow}>
-                  {otpTimer > 0 ? (
-                    <Text style={styles.resendTimerText}>Resend OTP in {otpTimer}s</Text>
-                  ) : (
-                    <TouchableOpacity onPress={handleSendMobileOtp}>
-                      <Text style={styles.resendLink}>{t('rentBike.resendOtp', 'Resend OTP')}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
       {/* Email Address & Verification UI */}

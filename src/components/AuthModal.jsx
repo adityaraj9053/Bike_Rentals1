@@ -115,6 +115,14 @@ export default function AuthModal({
   const [activeDobPicker, setActiveDobPicker] = useState(null); // 'day' | 'month' | 'year' | null
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
+  // Pending Google User awaiting 18+ Date of Birth Verification
+  const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
+  const [googleDobDay, setGoogleDobDay] = useState('');
+  const [googleDobMonth, setGoogleDobMonth] = useState('');
+  const [googleDobYear, setGoogleDobYear] = useState('');
+  const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState(false);
+  const [googleAgeError, setGoogleAgeError] = useState('');
+
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -176,10 +184,13 @@ export default function AuthModal({
           }
 
           if (userProfile) {
-            console.log('[AuthModal] Authenticated Google User Profile:', userProfile);
-            resetAllFields();
-            if (onLogin) onLogin(userProfile);
-            if (onClose) onClose();
+            console.log('[AuthModal] Authenticated Google User Profile (Awaiting 18+ verification):', userProfile);
+            setPendingGoogleUser(userProfile);
+            setGoogleDobDay('');
+            setGoogleDobMonth('');
+            setGoogleDobYear('');
+            setGoogleAgeError('');
+            setIsGoogleLoading(false);
           }
         } catch (err) {
           console.error('[AuthModal] Error parsing Google user data:', err);
@@ -214,6 +225,12 @@ export default function AuthModal({
     setDobYear('');
     setActiveDobPicker(null);
     setIsCalendarOpen(false);
+    setPendingGoogleUser(null);
+    setGoogleDobDay('');
+    setGoogleDobMonth('');
+    setGoogleDobYear('');
+    setIsGoogleCalendarOpen(false);
+    setGoogleAgeError('');
     setOtp('');
     setOtpSent(false);
     setErrorMsg('');
@@ -362,10 +379,13 @@ export default function AuthModal({
         // and retrieves user profile + idToken without redirect_uri mismatch
         const res = await signInWithGoogleWebGsi();
         if (res?.profile) {
-          console.log('[AuthModal] Google User authenticated via GIS:', res.profile, 'idToken:', res.idToken);
-          resetAllFields();
-          if (onLogin) onLogin(res.profile);
-          if (onClose) onClose();
+          console.log('[AuthModal] Google User authenticated via GIS (Awaiting 18+ verification):', res.profile, 'idToken:', res.idToken);
+          setPendingGoogleUser(res.profile);
+          setGoogleDobDay('');
+          setGoogleDobMonth('');
+          setGoogleDobYear('');
+          setGoogleAgeError('');
+          setIsGoogleLoading(false);
           return;
         }
       } catch (gisErr) {
@@ -417,6 +437,49 @@ export default function AuthModal({
     }
   };
 
+  const handleConfirmGoogleAge = () => {
+    setGoogleAgeError('');
+
+    // If person does not select date of birth
+    if (!googleDobDay || !googleDobMonth || !googleDobYear) {
+      setGoogleAgeError(
+        isHindi
+          ? 'साइनअप की अनुमति नहीं है - कृपया जन्म तिथि चुनें।'
+          : 'Signup not allowed. Please select your date of birth.'
+      );
+      return;
+    }
+
+    const age = calculateAge(googleDobDay, googleDobMonth, googleDobYear);
+
+    // Strict 18+ enforcement: born on or before 7 November 2008
+    const birthDate = new Date(parseInt(googleDobYear), parseInt(googleDobMonth) - 1, parseInt(googleDobDay));
+    birthDate.setHours(0, 0, 0, 0);
+
+    const cutoff = new Date(maxDobCutoff);
+    cutoff.setHours(23, 59, 59, 999);
+
+    if (age < 18 || birthDate > cutoff) {
+      setGoogleAgeError(
+        isHindi
+          ? 'साइनअप की अनुमति नहीं है - आपकी आयु 18 वर्ष या उससे अधिक होनी चाहिए (जन्म 7 नवम्बर 2008 या उससे पहले)।'
+          : 'Signup not allowed. You must be at least 18 years old (born on or before 7 November 2008).'
+      );
+      return;
+    }
+
+    // 18+ Verified! Complete Google login with verified birth date
+    const finalProfile = {
+      ...pendingGoogleUser,
+      dob: `${googleDobYear}-${googleDobMonth}-${googleDobDay}`,
+      ageVerified: true,
+    };
+
+    resetAllFields();
+    if (onLogin) onLogin(finalProfile);
+    if (onClose) onClose();
+  };
+
   const handleSignOut = () => {
     resetAllFields();
     if (onLogin) onLogin(null);
@@ -437,7 +500,14 @@ export default function AuthModal({
             <View style={[styles.modalCard, SHADOWS.card]}>
               <TouchableOpacity
                 style={styles.closeBtn}
-                onPress={onClose}
+                onPress={() => {
+                  if (pendingGoogleUser) {
+                    setPendingGoogleUser(null);
+                    setGoogleAgeError('');
+                  } else {
+                    onClose();
+                  }
+                }}
                 activeOpacity={0.7}
               >
                 <X size={18} color="#94A3B8" />
@@ -475,6 +545,195 @@ export default function AuthModal({
                         {t('auth.signOut', 'Sign Out')}
                       </Text>
                     </TouchableOpacity>
+                  </View>
+                ) : pendingGoogleUser ? (
+                  /* Google 18+ Age Verification Prompt Box */
+                  <View style={styles.googlePromptCard}>
+                    {/* Google User Identity Badge */}
+                    <View style={styles.googleUserBadge}>
+                      {pendingGoogleUser.avatar ? (
+                        <Image source={{ uri: pendingGoogleUser.avatar }} style={styles.googleAvatarSmall} />
+                      ) : (
+                        <View style={styles.googleAvatarFallback}>
+                          <User size={18} color="#38BDF8" />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.googleUserName} numberOfLines={1}>{pendingGoogleUser.name}</Text>
+                        <Text style={styles.googleUserEmail} numberOfLines={1}>{pendingGoogleUser.email}</Text>
+                      </View>
+                      <View style={styles.googleVerifiedTag}>
+                        <GoogleIcon size={14} />
+                        <Text style={styles.googleVerifiedTagText}>Google</Text>
+                      </View>
+                    </View>
+
+                    {/* Main Question Header */}
+                    <View style={styles.promptHeaderBox}>
+                      <View style={styles.promptIconCircle}>
+                        <ShieldCheck size={26} color="#10B981" />
+                      </View>
+                      <Text style={styles.promptQuestionTitle}>
+                        {t('auth.areYou18', 'Are you 18+?')}
+                      </Text>
+                      <Text style={styles.promptQuestionSub}>
+                        {t('auth.areYou18Sub', 'To ride and rent motorcycles, legal regulations require riders to be 18 years or older. Please provide your Date of Birth to complete signup.')}
+                      </Text>
+                    </View>
+
+                    {/* Error Banner: "Signup not allowed" */}
+                    {googleAgeError ? (
+                      <View style={styles.errorBox}>
+                        <AlertTriangle size={16} color={COLORS.accentRed} />
+                        <Text style={styles.errorText}>{googleAgeError}</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Column: DATE OF BIRTH (18+ MANDATORY) */}
+                    <View style={[styles.inputGroup, { marginTop: 8 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Calendar size={14} color="#38BDF8" />
+                          <Text style={styles.inputLabel}>
+                            {t('auth.dob', 'DATE OF BIRTH (18+ MANDATORY)')}
+                          </Text>
+                        </View>
+                        <View style={styles.strictAgePill}>
+                          <ShieldCheck size={11} color="#10B981" />
+                          <Text style={styles.strictAgePillText}>
+                            {isHindi ? `अधिकतम 7 नवम्बर ${maxAllowedRiderYear}` : `Max 07 Nov ${maxAllowedRiderYear}`}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Primary Interactive Calendar Picker Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.calendarDobBtn,
+                          googleDobDay && googleDobMonth && googleDobYear && styles.calendarDobBtnSelected,
+                        ]}
+                        onPress={() => setIsGoogleCalendarOpen(true)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.calendarDobBtnLeft}>
+                          <View style={styles.calendarDobIconWrap}>
+                            <Calendar size={18} color="#38BDF8" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={googleDobDay && googleDobMonth && googleDobYear ? styles.calendarDobMainTextSelected : styles.calendarDobMainText}>
+                              {googleDobDay && googleDobMonth && googleDobYear
+                                ? `${googleDobDay} ${monthsList.find((m) => m.value === googleDobMonth)?.label?.split(' ')[0] || googleDobMonth} ${googleDobYear}`
+                                : (isHindi ? 'कैलेंडर से जन्म तिथि चुनें' : 'Select Birth Date from Calendar')}
+                            </Text>
+                            <Text style={styles.calendarDobSubText}>
+                              {googleDobDay && googleDobMonth && googleDobYear
+                                ? `${calculateAge(googleDobDay, googleDobMonth, googleDobYear)} ${isHindi ? 'वर्ष (18+ सत्यापित)' : 'years old (18+ Verified)'}`
+                                : (isHindi ? `केवल 18+ मान्य (अधिकतम 7 नवम्बर 2008)` : `Strictly 18+ only (Max 07 Nov 2008)`)}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.calendarDobActionPill}>
+                          <Text style={styles.calendarDobActionText}>
+                            {isHindi ? 'कैलेंडर खोलें' : 'Open Calendar'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      
+                      {activeDobPicker === 'g_day' && (
+                        <View style={styles.pickerDropdownContainer}>
+                          <Text style={styles.pickerDropdownHeader}>{t('auth.selectBirthDay', 'Select Birth Day')}</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
+                            {DAYS.map((d) => (
+                              <TouchableOpacity
+                                key={d}
+                                style={[styles.pickerItemChip, googleDobDay === d && styles.pickerItemChipActive]}
+                                onPress={() => {
+                                  setGoogleDobDay(d);
+                                  setActiveDobPicker(googleDobMonth ? (googleDobYear ? null : 'g_year') : 'g_month');
+                                  setGoogleAgeError('');
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, googleDobDay === d && styles.pickerItemTextActive]}>{d}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      {activeDobPicker === 'g_month' && (
+                        <View style={styles.pickerDropdownContainer}>
+                          <Text style={styles.pickerDropdownHeader}>{t('auth.selectBirthMonth', 'Select Birth Month')}</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
+                            {monthsList.map((m) => (
+                              <TouchableOpacity
+                                key={m.value}
+                                style={[styles.pickerItemChip, googleDobMonth === m.value && styles.pickerItemChipActive]}
+                                onPress={() => {
+                                  setGoogleDobMonth(m.value);
+                                  setActiveDobPicker(googleDobYear ? null : 'g_year');
+                                  setGoogleAgeError('');
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, googleDobMonth === m.value && styles.pickerItemTextActive]}>{m.label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      {activeDobPicker === 'g_year' && (
+                        <View style={styles.pickerDropdownContainer}>
+                          <Text style={styles.pickerDropdownHeader}>{t('auth.selectBirthYear', 'Select Birth Year')}</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
+                            {YEARS.map((y) => (
+                              <TouchableOpacity
+                                key={y}
+                                style={[styles.pickerItemChip, googleDobYear === y && styles.pickerItemChipActive]}
+                                onPress={() => {
+                                  setGoogleDobYear(y);
+                                  setActiveDobPicker(null);
+                                  setGoogleAgeError('');
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, googleDobYear === y && styles.pickerItemTextActive]}>{y}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      <Text style={styles.dobHelper}>
+                        {t('auth.dobHelper', 'Age must be strictly 18 or above to rent and drive motorbikes.')}
+                      </Text>
+                    </View>
+
+                    {/* Action Buttons */}
+                    <View style={{ marginTop: 18, gap: 10 }}>
+                      <TouchableOpacity
+                        style={styles.submitBtn}
+                        onPress={handleConfirmGoogleAge}
+                        activeOpacity={0.85}
+                      >
+                        <ShieldCheck size={18} color="#FFFFFF" />
+                        <Text style={styles.submitBtnText}>
+                          {t('auth.confirmSignupBtn', 'Confirm 18+ & Complete Signup')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.cancelGoogleBtn}
+                        onPress={() => {
+                          setPendingGoogleUser(null);
+                          setGoogleAgeError('');
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.cancelGoogleBtnText}>
+                          {t('auth.cancelGoogleBtn', 'Cancel')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : (
                   /* Auth Form View */
@@ -632,53 +891,7 @@ export default function AuthModal({
                               </View>
                             </TouchableOpacity>
 
-                            {/* Or choose using 3 quick dropdown selectors */}
-                            <View style={styles.orDividerRow}>
-                              <View style={styles.orDividerLine} />
-                              <Text style={styles.orDividerText}>
-                                {isHindi ? 'या दिन / माह / वर्ष चुनें' : 'or pick Day / Month / Year'}
-                              </Text>
-                              <View style={styles.orDividerLine} />
-                            </View>
-
-                            {/* 3 Separate Dropdown Selectors for Day, Month, Year */}
-                            <View style={styles.dobSelectorsRow}>
-                              {/* Day Selector */}
-                              <TouchableOpacity
-                                style={[styles.dobSelectBox, activeDobPicker === 'day' && styles.dobSelectBoxActive]}
-                                onPress={() => setActiveDobPicker(activeDobPicker === 'day' ? null : 'day')}
-                                activeOpacity={0.8}
-                              >
-                                <Text style={dobDay ? styles.dobValueText : styles.dobPlaceholderText}>
-                                  {dobDay ? `${isHindi ? 'दिन' : 'Day'} ${dobDay}` : t('auth.dobDay', 'Day')}
-                                </Text>
-                                <ChevronDown size={14} color="#94A3B8" />
-                              </TouchableOpacity>
-
-                              {/* Month Selector */}
-                              <TouchableOpacity
-                                style={[styles.dobSelectBox, activeDobPicker === 'month' && styles.dobSelectBoxActive, { flex: 1.3 }]}
-                                onPress={() => setActiveDobPicker(activeDobPicker === 'month' ? null : 'month')}
-                                activeOpacity={0.8}
-                              >
-                                <Text style={dobMonth ? styles.dobValueText : styles.dobPlaceholderText}>
-                                  {dobMonth ? monthsList.find(m => m.value === dobMonth)?.label || dobMonth : t('auth.dobMonth', 'Month')}
-                                </Text>
-                                <ChevronDown size={14} color="#94A3B8" />
-                              </TouchableOpacity>
-
-                              {/* Year Selector - strictly limited to 18+ years */}
-                              <TouchableOpacity
-                                style={[styles.dobSelectBox, activeDobPicker === 'year' && styles.dobSelectBoxActive, { flex: 1.2 }]}
-                                onPress={() => setActiveDobPicker(activeDobPicker === 'year' ? null : 'year')}
-                                activeOpacity={0.8}
-                              >
-                                <Text style={dobYear ? styles.dobValueText : styles.dobPlaceholderText}>
-                                  {dobYear || t('auth.dobYear', 'Year')}
-                                </Text>
-                                <ChevronDown size={14} color="#94A3B8" />
-                              </TouchableOpacity>
-                            </View>
+                            
 
                             {/* Expanded Selection List inside Modal */}
                             {activeDobPicker === 'day' && (
@@ -852,23 +1065,38 @@ export default function AuthModal({
 
     {/* Interactive 18+ Date of Birth Calendar Picker Modal */}
     <CalendarPickerModal
-      visible={isCalendarOpen}
-      onClose={() => setIsCalendarOpen(false)}
+      visible={isCalendarOpen || isGoogleCalendarOpen}
+      onClose={() => {
+        setIsCalendarOpen(false);
+        setIsGoogleCalendarOpen(false);
+      }}
       mode="past"
-      initialDate={dobYear && dobMonth && dobDay ? `${dobYear}-${dobMonth}-${dobDay}` : undefined}
+      initialDate={
+        isGoogleCalendarOpen
+          ? (googleDobYear && googleDobMonth && googleDobDay ? `${googleDobYear}-${googleDobMonth}-${googleDobDay}` : undefined)
+          : (dobYear && dobMonth && dobDay ? `${dobYear}-${dobMonth}-${dobDay}` : undefined)
+      }
       maxDate={maxDobDateStr}
       title={isHindi ? 'जन्म तिथि चुनें (18+ अनिवार्य)' : 'Select Date of Birth (18+ Mandatory)'}
       onSelectDate={(dateStr) => {
         if (dateStr) {
           const parts = dateStr.split('-');
           if (parts.length === 3) {
-            setDobYear(parts[0]);
-            setDobMonth(parts[1]);
-            setDobDay(parts[2]);
-            setErrorMsg('');
+            if (isGoogleCalendarOpen) {
+              setGoogleDobYear(parts[0]);
+              setGoogleDobMonth(parts[1]);
+              setGoogleDobDay(parts[2]);
+              setGoogleAgeError('');
+            } else {
+              setDobYear(parts[0]);
+              setDobMonth(parts[1]);
+              setDobDay(parts[2]);
+              setErrorMsg('');
+            }
           }
         }
         setIsCalendarOpen(false);
+        setIsGoogleCalendarOpen(false);
       }}
     />
   </>
@@ -968,6 +1196,106 @@ const styles = StyleSheet.create({
   infoText: {
     color: '#38BDF8',
     fontSize: 12.5,
+  },
+  googlePromptCard: {
+    paddingVertical: 4,
+  },
+  googleUserBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: RADIUS.md,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 14,
+  },
+  googleAvatarSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
+  },
+  googleAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleUserName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  googleUserEmail: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  googleVerifiedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(66, 133, 244, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(66, 133, 244, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  googleVerifiedTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#60A5FA',
+  },
+  promptHeaderBox: {
+    alignItems: 'center',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingVertical: 6,
+  },
+  promptIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(16, 185, 129, 0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  promptQuestionTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  promptQuestionSub: {
+    fontSize: 12.5,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingHorizontal: 12,
+  },
+  cancelGoogleBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  cancelGoogleBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94A3B8',
   },
   inputGroup: {
     marginBottom: 14,

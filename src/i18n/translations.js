@@ -249,6 +249,11 @@ export const TRANSLATIONS = {
       enterOtpErr: 'Please enter the 4-digit verification code.',
       invalidOtpErr: 'Invalid OTP code! Please enter 1234.',
       codeSentMsg: 'Verification code sent to',
+      areYou18: 'Are you 18+?',
+      areYou18Sub: 'To ride and rent motorcycles, legal regulations require riders to be 18 years or older. Please provide your Date of Birth to complete signup.',
+      signupNotAllowed: 'Signup not allowed. Date of birth is mandatory and you must be 18+ to register.',
+      confirmSignupBtn: 'Confirm 18+ & Complete Signup',
+      cancelGoogleBtn: 'Cancel',
     },
     guide: {
       pretitle: 'HOW RENTAL WORKS',
@@ -678,6 +683,11 @@ export const TRANSLATIONS = {
       enterOtpErr: 'कृपया 4 अंकों का सत्यापन कोड दर्ज करें।',
       invalidOtpErr: 'अमान्य ओटीपी कोड! कृपया 1234 दर्ज करें।',
       codeSentMsg: 'सत्यापन कोड भेजा गया:',
+      areYou18: 'क्या आप 18+ हैं?',
+      areYou18Sub: 'मोटरसाइकिल चलाने व किराए पर लेने के लिए कानूनी रूप से 18 वर्ष या उससे अधिक होना अनिवार्य है। साइनअप पूरा करने के लिए कृपया अपनी जन्म तिथि दर्ज करें।',
+      signupNotAllowed: 'साइनअप की अनुमति नहीं है - जन्म तिथि अनिवार्य है और पंजीकरण के लिए आपकी आयु 18+ होनी चाहिए।',
+      confirmSignupBtn: '18+ की पुष्टि करें और साइनअप पूरा करें',
+      cancelGoogleBtn: 'रद्द करें',
     },
     guide: {
       pretitle: 'रेंटल कैसे काम करता है',
