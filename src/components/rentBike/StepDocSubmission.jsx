@@ -22,9 +22,11 @@ import {
   Eye,
   Hash,
   UserCheck,
+  X,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../../theme/colors';
 import { useLanguage } from '../../i18n/LanguageContext';
+import CalendarPickerModal from '../CalendarPickerModal';
 
 export default function StepDocSubmission({
   data,
@@ -35,6 +37,7 @@ export default function StepDocSubmission({
   const { t, isHindi } = useLanguage();
   const [activeUploadDoc, setActiveUploadDoc] = useState(null);
   const [showDocPreviewKey, setShowDocPreviewKey] = useState(null);
+  const [calendarTarget, setCalendarTarget] = useState(null); // 'insuranceExpiryDate' | 'pucExpiryDate' | null
 
   const handleSimulateDocUpload = (docKey, sampleFileName) => {
     setActiveUploadDoc(docKey);
@@ -294,17 +297,38 @@ export default function StepDocSubmission({
             <Text style={styles.label}>
               Insurance Expiry Date <Text style={styles.req}>*</Text>
             </Text>
-            <View style={[styles.inputBox, errors.insuranceExpiryDate && styles.inputError]}>
+            <TouchableOpacity
+              style={[styles.inputBox, styles.datePickerBox, errors.insuranceExpiryDate && styles.inputError]}
+              onPress={() => setCalendarTarget('insuranceExpiryDate')}
+              activeOpacity={0.8}
+            >
               <Calendar size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                value={data.insuranceExpiryDate}
-                onChangeText={(val) => onChange('insuranceExpiryDate', val)}
-                placeholder="YYYY-MM-DD (e.g. 2027-05-18)"
-                placeholderTextColor={COLORS.textMuted}
-                selectTextOnFocus={true}
-              />
-            </View>
+              <Text
+                style={[
+                  styles.datePickerText,
+                  !data.insuranceExpiryDate && styles.datePickerPlaceholder,
+                ]}
+                numberOfLines={1}
+              >
+                {data.insuranceExpiryDate || (isHindi ? 'समाप्ति तिथि चुनें (YYYY-MM-DD)' : 'Select Expiry Date (YYYY-MM-DD)')}
+              </Text>
+              {data.insuranceExpiryDate ? (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onChange('insuranceExpiryDate', '');
+                  }}
+                  style={styles.clearDateBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <X size={14} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.calendarMiniBadge}>
+                  <Calendar size={13} color="#38BDF8" />
+                </View>
+              )}
+            </TouchableOpacity>
             {errors.insuranceExpiryDate && (
               <Text style={styles.errorText}>{errors.insuranceExpiryDate}</Text>
             )}
@@ -392,17 +416,38 @@ export default function StepDocSubmission({
           <Text style={styles.label}>
             PUC Expiry Date <Text style={styles.req}>*</Text>
           </Text>
-          <View style={[styles.inputBox, errors.pucExpiryDate && styles.inputError]}>
+          <TouchableOpacity
+            style={[styles.inputBox, styles.datePickerBox, errors.pucExpiryDate && styles.inputError]}
+            onPress={() => setCalendarTarget('pucExpiryDate')}
+            activeOpacity={0.8}
+          >
             <Calendar size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={data.pucExpiryDate}
-              onChangeText={(val) => onChange('pucExpiryDate', val)}
-              placeholder="YYYY-MM-DD (e.g. 2027-04-10)"
-              placeholderTextColor={COLORS.textMuted}
-              selectTextOnFocus={true}
-            />
-          </View>
+            <Text
+              style={[
+                styles.datePickerText,
+                !data.pucExpiryDate && styles.datePickerPlaceholder,
+              ]}
+              numberOfLines={1}
+            >
+              {data.pucExpiryDate || (isHindi ? 'समाप्ति तिथि चुनें (YYYY-MM-DD)' : 'Select Expiry Date (YYYY-MM-DD)')}
+            </Text>
+            {data.pucExpiryDate ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onChange('pucExpiryDate', '');
+                }}
+                style={styles.clearDateBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={14} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.calendarMiniBadge}>
+                <Calendar size={13} color="#38BDF8" />
+              </View>
+            )}
+          </TouchableOpacity>
           {errors.pucExpiryDate && <Text style={styles.errorText}>{errors.pucExpiryDate}</Text>}
         </View>
 
@@ -552,6 +597,31 @@ export default function StepDocSubmission({
           )}
         </View>
       </View>
+
+      {/* Interactive Calendar Picker Modal for Expiry Dates */}
+      <CalendarPickerModal
+        visible={calendarTarget !== null}
+        onClose={() => setCalendarTarget(null)}
+        mode="future"
+        initialDate={
+          calendarTarget === 'insuranceExpiryDate'
+            ? data.insuranceExpiryDate
+            : calendarTarget === 'pucExpiryDate'
+            ? data.pucExpiryDate
+            : undefined
+        }
+        title={
+          calendarTarget === 'insuranceExpiryDate'
+            ? (isHindi ? 'बीमा समाप्ति तिथि चुनें' : 'Select Insurance Expiry Date')
+            : (isHindi ? 'पीयूसी समाप्ति तिथि चुनें' : 'Select PUC Expiry Date')
+        }
+        onSelectDate={(dateStr) => {
+          if (calendarTarget) {
+            onChange(calendarTarget, dateStr);
+          }
+          setCalendarTarget(null);
+        }}
+      />
     </View>
   );
 }
@@ -924,6 +994,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#38BDF8',
     marginBottom: 8,
+  },
+  datePickerBox: {
+    justifyContent: 'space-between',
+    paddingRight: 8,
+    cursor: 'pointer',
+  },
+  datePickerText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  datePickerPlaceholder: {
+    color: COLORS.textMuted,
+    fontWeight: '400',
+  },
+  calendarMiniBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  clearDateBtn: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginLeft: 6,
   },
 });
 

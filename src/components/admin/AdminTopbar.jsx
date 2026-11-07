@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
   Menu,
   Search,
@@ -29,7 +30,36 @@ export default function AdminTopbar({
   onSearchChange,
   onExitToMarketplace,
   unreadNotifications = 3,
+  navigation: propNavigation,
 }) {
+  let hookNavigation = null;
+  try {
+    hookNavigation = useNavigation();
+  } catch (e) {
+    // Graceful fallback if rendered outside a NavigationContainer
+  }
+  const navigation = propNavigation || hookNavigation;
+
+  const handleReturnToHome = () => {
+    if (typeof onExitToMarketplace === 'function') {
+      onExitToMarketplace();
+      return;
+    }
+    if (navigation?.navigate) {
+      try {
+        navigation.navigate('MainTabs', { screen: 'Home' });
+      } catch (err) {
+        try {
+          navigation.navigate('Home');
+        } catch (e) {
+          if (navigation.canGoBack && navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }
+      }
+    }
+  };
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
@@ -74,7 +104,7 @@ export default function AdminTopbar({
         {/* Marketplace Switcher Link */}
         <TouchableOpacity
           style={styles.marketplaceSwitchBtn}
-          onPress={onExitToMarketplace}
+          onPress={handleReturnToHome}
           activeOpacity={0.8}
         >
           <ExternalLink size={13} color="#38BDF8" />
@@ -161,7 +191,7 @@ export default function AdminTopbar({
             style={styles.profileDropItem}
             onPress={() => {
               setShowProfileMenu(false);
-              onExitToMarketplace();
+              handleReturnToHome();
             }}
           >
             <ExternalLink size={15} color="#38BDF8" />
@@ -172,7 +202,7 @@ export default function AdminTopbar({
             style={[styles.profileDropItem, { marginTop: 4 }]}
             onPress={() => {
               setShowProfileMenu(false);
-              onExitToMarketplace();
+              handleReturnToHome();
             }}
           >
             <LogOut size={15} color="#F43F5E" />

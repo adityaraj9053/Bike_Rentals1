@@ -68,8 +68,12 @@ export default function CalendarPickerModal({
   const effectiveMax = maxDate ? parseDate(maxDate) : (mode === 'past' ? defaultPastMax : null);
   if (effectiveMax) effectiveMax.setHours(23, 59, 59, 999);
 
-  const maxAllowedYear = effectiveMax ? effectiveMax.getFullYear() : today.getFullYear();
-  const minAllowedYear = 1930;
+  const maxAllowedYear = effectiveMax
+    ? effectiveMax.getFullYear()
+    : mode === 'past'
+    ? defaultPastMax.getFullYear()
+    : today.getFullYear() + 15;
+  const minAllowedYear = mode === 'future' ? today.getFullYear() - 1 : 1930;
 
   useEffect(() => {
     if (visible) {
@@ -356,12 +360,14 @@ export default function CalendarPickerModal({
             </View>
           )}
 
-          {/* Direct Year Picker View (when toggled in past mode) */}
-          {showYearPicker && mode === 'past' ? (
+          {/* Direct Year Picker View (when toggled) */}
+          {showYearPicker ? (
             <View style={styles.yearPickerContainer}>
               <View style={styles.yearPickerHeader}>
                 <Text style={styles.yearPickerTitle}>
-                  {isHindi ? `जन्म वर्ष चुनें (अधिकतम ${maxAllowedYear})` : `Select Birth Year (Max ${maxAllowedYear})`}
+                  {mode === 'past'
+                    ? (isHindi ? `जन्म वर्ष चुनें (अधिकतम ${maxAllowedYear})` : `Select Birth Year (Max ${maxAllowedYear})`)
+                    : (isHindi ? 'वर्ष चुनें' : 'Select Year')}
                 </Text>
                 <TouchableOpacity onPress={() => setShowYearPicker(false)}>
                   <X size={15} color="#94A3B8" />
@@ -372,7 +378,7 @@ export default function CalendarPickerModal({
                 contentContainerStyle={styles.yearGridWrap}
                 showsVerticalScrollIndicator={true}
               >
-                {Array.from({ length: maxAllowedYear - minAllowedYear + 1 }, (_, i) => maxAllowedYear - i).map((y) => (
+                {Array.from({ length: Math.max(1, maxAllowedYear - minAllowedYear + 1) }, (_, i) => maxAllowedYear - i).map((y) => (
                   <TouchableOpacity
                     key={y}
                     style={[styles.yearChip, year === y && styles.yearChipActive]}
@@ -401,14 +407,14 @@ export default function CalendarPickerModal({
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  onPress={() => mode === 'past' && setShowYearPicker(true)}
-                  activeOpacity={mode === 'past' ? 0.7 : 1}
+                  onPress={() => setShowYearPicker(!showYearPicker)}
+                  activeOpacity={0.7}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                 >
                   <Text style={styles.monthYearTitle}>
                     {monthNames[month]} {year}
                   </Text>
-                  {mode === 'past' && <ChevronDown size={14} color="#38BDF8" />}
+                  <ChevronDown size={14} color="#38BDF8" />
                 </TouchableOpacity>
 
                 <TouchableOpacity

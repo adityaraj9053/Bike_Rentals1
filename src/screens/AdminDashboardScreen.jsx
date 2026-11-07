@@ -192,11 +192,26 @@ export default function AdminDashboardScreen({
     <View style={styles.screenRoot}>
       {/* Top Navbar */}
       <AdminTopbar
+        navigation={navigation}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         isSidebarOpen={isSidebarOpen}
         searchQuery={globalSearch}
         onSearchChange={setGlobalSearch}
-        onExitToMarketplace={() => navigation?.navigate('Home')}
+        onExitToMarketplace={() => {
+          if (navigation?.navigate) {
+            try {
+              navigation.navigate('MainTabs', { screen: 'Home' });
+            } catch (err) {
+              try {
+                navigation.navigate('Home');
+              } catch (e) {
+                if (navigation.canGoBack && navigation.canGoBack()) {
+                  navigation.goBack();
+                }
+              }
+            }
+          }
+        }}
         unreadNotifications={badges.openComplaints + badges.pendingBikes}
       />
 
