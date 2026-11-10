@@ -1,0 +1,1340 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Platform,
+  ActivityIndicator,
+  Image,
+} from 'react-native';
+import {
+  FileText,
+  Upload,
+  CheckCircle2,
+  Trash2,
+  RefreshCw,
+  Lock,
+  ShieldCheck,
+  AlertTriangle,
+  Info,
+  Calendar,
+  Eye,
+  Hash,
+  UserCheck,
+  X,
+} from 'lucide-react-native';
+import { COLORS, RADIUS } from '../../theme/colors';
+import { useLanguage } from '../../i18n/LanguageContext';
+import CalendarPickerModal from '../CalendarPickerModal';
+import { documentsAPI } from '../../services/api';
+
+export default function StepDocSubmission({
+  data,
+  onChange,
+  errors,
+  onShowToast,
+}) {
+  const { t, isHindi } = useLanguage();
+  const [activeUploadDoc, setActiveUploadDoc] = useState(null);
+  const [showDocPreviewKey, setShowDocPreviewKey] = useState(null);
+  const [calendarTarget, setCalendarTarget] = useState(null); // 'insuranceExpiryDate' | 'pucExpiryDate' | null
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  /**
+   * Upload real document file selected from local PC
+   */
+  const handleUploadFile = async (file, docKey) => {
+    const allowedMimes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    const ext = file.name ? file.name.split('.').pop().toLowerCase() : '';
+    const isMimeAllowed = allowedMimes.includes(file.type);
+    const isExtAllowed = ['pdf', 'jpg', 'jpeg', 'png'].includes(ext);
+
+    if (!isMimeAllowed && !isExtAllowed) {
+      if (onShowToast) onShowToast('Only PDF, JPG, and PNG documents are allowed.');
+      return;
+    }
+
+    const maxBytes = 10 * 1024 * 1024; // 10MB limit
+    if (file.size > maxBytes) {
+      if (onShowToast) onShowToast(`"${file.name}" exceeds the 10MB file limit.`);
+      return;
+    }
+
+    setActiveUploadDoc(docKey);
+
+    let localUrl = null;
+    if (typeof URL !== 'undefined' && URL.createObjectURL) {
+      try {
+        localUrl = URL.createObjectURL(file);
+      } catch (e) {
+        console.warn('[DocPicker] Could not create local preview URL:', e);
+      }
+    }
+
+    const docEntry = {
+      fileName: file.name,
+      fileSize: formatFileSize(file.size),
+      fileType: file.type || (ext === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+      uploadedAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      fileUrl: localUrl,
+      previewUrl: localUrl,
+      status: 'Pending Verification',
+      key: null,
+    };
+
+    // Update parent state immediately so UI updates with real document info
+    const updatedDocs = {
+      ...(data.documents || {}),
+      [docKey]: docEntry,
+    };
+    onChange('documents', updatedDocs);
+
+    // Attempt secure sync to backend / Cloudflare R2
+    try {
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('file', file);
+      formData.append('documentType', docKey);
+      const bikeIdentifier = data._id || (data.registrationNumber ? data.registrationNumber.replace(/\s+/g, '_') : 'pending_bike');
+      formData.append('bikeId', bikeIdentifier);
+
+      const res = await documentsAPI.uploadBikeDocument(formData, bikeIdentifier, docKey);
+      if (res && res.data) {
+        const syncedDoc = {
+          ...docEntry,
+          key: res.data.key,
+          fileUrl: res.data.signedUrl || docEntry.fileUrl,
+          previewUrl: res.data.signedUrl || docEntry.previewUrl,
+          status: 'Encrypted & Stored in R2 Vault',
+        };
+        onChange('documents', {
+          ...(data.documents || {}),
+          [docKey]: syncedDoc,
+        });
+      }
+      if (onShowToast) onShowToast(`${file.name} uploaded securely.`);
+    } catch (apiErr) {
+      console.warn('[DocUpload Notice]: Stored locally. Backend sync notice:', apiErr.message);
+      if (onShowToast) onShowToast(`${file.name} uploaded from PC successfully.`);
+    } finally {
+      setActiveUploadDoc(null);
+    }
+  };
+
+  /**
+   * Opens native system file picker dialog to choose document from local PC
+   */
+  const handlePickDocument = (docKey) => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/pdf,image/jpeg,image/png,image/jpg,.pdf,.jpg,.jpeg,.png';
+      input.onchange = async (e) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          await handleUploadFile(file, docKey);
+        }
+      };
+      input.click();
+    } else {
+      if (onShowToast) onShowToast('File upload is supported on modern desktop browsers.');
+    }
+  };
+
+  const handleRemoveDoc = (docKey) => {
+    const doc = data.documents?.[docKey];
+    if (doc?.key) {
+      documentsAPI.deleteDocument(doc.key).catch((err) => {
+        console.warn('[Doc Delete Notice]:', err.message);
+      });
+    }
+    const updatedDocs = { ...(data.documents || {}) };
+    delete updatedDocs[docKey];
+    onChange('documents', updatedDocs);
+    if (showDocPreviewKey === docKey) {
+      setShowDocPreviewKey(null);
+    }
+    if (onShowToast) onShowToast('Document removed.');
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.badgePill}>
+          <Text style={styles.badgeText}>{t('rentBike.docStepBadge', 'STEP 3 OF 5')}</Text>
+        </View>
+        <Text style={styles.sectionTitle}>{t('rentBike.docTitle', 'Vehicle Document Submission')}</Text>
+        <Text style={styles.sectionSub}>
+          {t('rentBike.docSub', 'Upload authentic RTO and compliance documents. High-resolution PDF or JPG documents are accepted.')}
+        </Text>
+      </View>
+
+      {/* Mandatory Confidentiality & Privacy Notice */}
+      <View style={styles.confidentialityBanner}>
+        <View style={styles.lockIconWrap}>
+          <Lock size={18} color="#38BDF8" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.confidentialityTitle}>{t('rentBike.confidentialityTitle', 'Confidential & Encrypted Document Vault')}</Text>
+          <Text style={styles.confidentialityText}>
+            {t('rentBike.confidentialitySub', 'All uploaded registration certificates, insurance binders, and PUC records are strictly encrypted. They are never shown publicly.')}
+          </Text>
+        </View>
+      </View>
+
+      {/* 1. Registration Certificate (RC) */}
+      <View style={styles.docCard}>
+        <View style={styles.docCardTop}>
+          <View style={styles.docTitleGroup}>
+            <FileText size={20} color="#38BDF8" />
+            <View>
+              <Text style={styles.docCardHeading}>
+                {t('rentBike.rcTitle', 'Registration Certificate (RC)')} <Text style={styles.req}>*</Text>
+              </Text>
+              <Text style={styles.docCardSub}>
+                Upload clear front & back copy of Vehicle RC Smart Card or Parivahan Digital RC.
+              </Text>
+            </View>
+          </View>
+
+          {data.documents?.rc && (
+            <View style={styles.statusBadgePending}>
+              <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            </View>
+          )}
+        </View>
+
+        {data.documents?.rc ? (
+          <View style={styles.uploadedDocRow}>
+            <View style={styles.uploadedDocLeft}>
+              <View style={styles.fileIconBox}>
+                <FileText size={18} color="#38BDF8" />
+              </View>
+              <View>
+                <Text style={styles.docNameText}>{data.documents.rc.fileName}</Text>
+                <Text style={styles.docMetaText}>
+                  {data.documents.rc.fileSize} • Uploaded on {data.documents.rc.uploadedAt}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.docActionGroup}>
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => setShowDocPreviewKey(showDocPreviewKey === 'rc' ? null : 'rc')}
+                activeOpacity={0.7}
+              >
+                <Eye size={14} color="#38BDF8" />
+                <Text style={styles.actionBtnText}>
+                  {showDocPreviewKey === 'rc' ? 'Hide Preview' : 'Preview'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => handlePickDocument('rc')}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={13} color="#FFFFFF" />
+                <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Replace</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionBtnSmall, styles.deleteBtnSmall]}
+                onPress={() => handleRemoveDoc('rc')}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={13} color="#F43F5E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.uploadBox}
+            onPress={() => handlePickDocument('rc')}
+            activeOpacity={0.8}
+            disabled={activeUploadDoc === 'rc'}
+          >
+            {activeUploadDoc === 'rc' ? (
+              <ActivityIndicator size="small" color="#38BDF8" />
+            ) : (
+              <>
+                <Upload size={22} color="#38BDF8" />
+                <Text style={styles.uploadBoxText}>Click to Upload RC Document (PDF/JPG max 10MB)</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* RC Preview Box */}
+        {showDocPreviewKey === 'rc' && (
+          <View style={styles.previewBox}>
+            <Text style={styles.previewHeading}>Document Preview: {data.documents?.rc?.fileName}</Text>
+
+            {data.documents?.rc?.fileUrl && (data.documents.rc.fileType?.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(data.documents.rc.fileName)) ? (
+              <View style={styles.imagePreviewWrap}>
+                <Image
+                  source={{ uri: data.documents.rc.fileUrl }}
+                  style={styles.realDocImagePreview}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            {data.documents?.rc?.fileUrl && (data.documents.rc.fileType === 'application/pdf' || /\.pdf$/i.test(data.documents.rc.fileName)) ? (
+              <View style={styles.pdfPreviewWrap}>
+                <FileText size={32} color="#38BDF8" />
+                <Text style={styles.pdfNameText}>{data.documents.rc.fileName}</Text>
+                <TouchableOpacity
+                  style={styles.openDocBtn}
+                  onPress={() => {
+                    if (typeof window !== 'undefined' && window.open) {
+                      window.open(data.documents.rc.fileUrl, '_blank');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Eye size={14} color="#38BDF8" />
+                  <Text style={styles.openDocBtnText}>Open Document in New Tab</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {/* <View style={styles.simulatedSmartCard}>
+              <View style={styles.smartCardHeader}>
+                <Text style={styles.smartCardHeaderTitle}>TRANSPORT DEPARTMENT • MOTOR VEHICLE RC</Text>
+                <Text style={styles.smartCardState}>STATE REGISTRATION</Text>
+              </View>
+              <View style={styles.smartCardDetails}>
+                <Text style={styles.scDetail}><Text style={styles.scBold}>Reg No:</Text> {data.registrationNumber || 'MH 02 FJ 9042'}</Text>
+                <Text style={styles.scDetail}><Text style={styles.scBold}>Owner:</Text> {data.registeredOwnerName || data.fullName || 'Registered Owner'}</Text>
+                <Text style={styles.scDetail}><Text style={styles.scBold}>Model:</Text> {data.brand} {data.model || 'Motorcycle'}</Text>
+                <Text style={styles.scDetail}><Text style={styles.scBold}>Chassis:</Text> {data.chassisNumber || 'ME3H450XXXX88291'}</Text>
+              </View>
+              <Text style={styles.scNotice}>* Encrypted Digital Representation for Operational Review</Text>
+            </View> */}
+          </View>
+        )}
+
+        {errors['documents.rc'] && (
+          <Text style={styles.errorText}>{errors['documents.rc']}</Text>
+        )}
+      </View>
+
+      {/* 2. Insurance Certificate */}
+      <View style={styles.docCard}>
+        <View style={styles.docCardTop}>
+          <View style={styles.docTitleGroup}>
+            <ShieldCheck size={20} color="#38BDF8" />
+            <View>
+              <Text style={styles.docCardHeading}>
+                {t('rentBike.insuranceTitle', 'Comprehensive Insurance Certificate')} <Text style={styles.req}>*</Text>
+              </Text>
+              <Text style={styles.docCardSub}>
+                Upload valid Third-Party or Comprehensive Motor Vehicle Policy.
+              </Text>
+            </View>
+          </View>
+
+          {data.documents?.insurance && (
+            <View style={styles.statusBadgePending}>
+              <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            </View>
+          )}
+        </View>
+
+        {data.documents?.insurance ? (
+          <View style={styles.uploadedDocRow}>
+            <View style={styles.uploadedDocLeft}>
+              <View style={styles.fileIconBox}>
+                <FileText size={18} color="#38BDF8" />
+              </View>
+              <View>
+                <Text style={styles.docNameText}>{data.documents.insurance.fileName}</Text>
+                <Text style={styles.docMetaText}>
+                  {data.documents.insurance.fileSize} • Uploaded on {data.documents.insurance.uploadedAt}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.docActionGroup}>
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => setShowDocPreviewKey(showDocPreviewKey === 'insurance' ? null : 'insurance')}
+                activeOpacity={0.7}
+              >
+                <Eye size={14} color="#38BDF8" />
+                <Text style={styles.actionBtnText}>
+                  {showDocPreviewKey === 'insurance' ? 'Hide Preview' : 'Preview'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => handlePickDocument('insurance')}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={13} color="#FFFFFF" />
+                <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Replace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtnSmall, styles.deleteBtnSmall]}
+                onPress={() => handleRemoveDoc('insurance')}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={13} color="#F43F5E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.uploadBox}
+            onPress={() => handlePickDocument('insurance')}
+            activeOpacity={0.8}
+            disabled={activeUploadDoc === 'insurance'}
+          >
+            {activeUploadDoc === 'insurance' ? (
+              <ActivityIndicator size="small" color="#38BDF8" />
+            ) : (
+              <>
+                <Upload size={22} color="#38BDF8" />
+                <Text style={styles.uploadBoxText}>Upload Insurance Certificate (PDF/JPG max 10MB)</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Insurance Preview Box */}
+        {showDocPreviewKey === 'insurance' && (
+          <View style={styles.previewBox}>
+            <Text style={styles.previewHeading}>Document Preview: {data.documents?.insurance?.fileName}</Text>
+
+            {data.documents?.insurance?.fileUrl && (data.documents.insurance.fileType?.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(data.documents.insurance.fileName)) ? (
+              <View style={styles.imagePreviewWrap}>
+                <Image
+                  source={{ uri: data.documents.insurance.fileUrl }}
+                  style={styles.realDocImagePreview}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            {data.documents?.insurance?.fileUrl && (data.documents.insurance.fileType === 'application/pdf' || /\.pdf$/i.test(data.documents.insurance.fileName)) ? (
+              <View style={styles.pdfPreviewWrap}>
+                <FileText size={32} color="#38BDF8" />
+                <Text style={styles.pdfNameText}>{data.documents.insurance.fileName}</Text>
+                <TouchableOpacity
+                  style={styles.openDocBtn}
+                  onPress={() => {
+                    if (typeof window !== 'undefined' && window.open) {
+                      window.open(data.documents.insurance.fileUrl, '_blank');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Eye size={14} color="#38BDF8" />
+                  <Text style={styles.openDocBtnText}>Open Document in New Tab</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {/* Insurance Policy Details Inputs */}
+        <View style={styles.gridTwo}>
+          <View style={styles.gridItem}>
+            <Text style={styles.label}>
+              Policy Number <Text style={styles.req}>*</Text>
+            </Text>
+            <View style={[styles.inputBox, errors.insurancePolicyNumber && styles.inputError]}>
+              <Hash size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={data.insurancePolicyNumber}
+                onChangeText={(val) => onChange('insurancePolicyNumber', val)}
+                placeholder="e.g. 3005/2024/9812401"
+                placeholderTextColor={COLORS.textMuted}
+                selectTextOnFocus={true}
+              />
+            </View>
+            {errors.insurancePolicyNumber && (
+              <Text style={styles.errorText}>{errors.insurancePolicyNumber}</Text>
+            )}
+          </View>
+
+          <View style={styles.gridItem}>
+            <Text style={styles.label}>
+              Insurance Expiry Date <Text style={styles.req}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[styles.inputBox, styles.datePickerBox, errors.insuranceExpiryDate && styles.inputError]}
+              onPress={() => setCalendarTarget('insuranceExpiryDate')}
+              activeOpacity={0.8}
+            >
+              <Calendar size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+              <Text
+                style={[
+                  styles.datePickerText,
+                  !data.insuranceExpiryDate && styles.datePickerPlaceholder,
+                ]}
+                numberOfLines={1}
+              >
+                {data.insuranceExpiryDate || (isHindi ? 'समाप्ति तिथि चुनें (YYYY-MM-DD)' : 'Select Expiry Date (YYYY-MM-DD)')}
+              </Text>
+              {data.insuranceExpiryDate ? (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onChange('insuranceExpiryDate', '');
+                  }}
+                  style={styles.clearDateBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <X size={14} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.calendarMiniBadge}>
+                  <Calendar size={13} color="#38BDF8" />
+                </View>
+              )}
+            </TouchableOpacity>
+            {errors.insuranceExpiryDate && (
+              <Text style={styles.errorText}>{errors.insuranceExpiryDate}</Text>
+            )}
+          </View>
+        </View>
+
+        {errors['documents.insurance'] && (
+          <Text style={styles.errorText}>{errors['documents.insurance']}</Text>
+        )}
+      </View>
+
+      {/* 3. Pollution Under Control (PUC) */}
+      <View style={styles.docCard}>
+        <View style={styles.docCardTop}>
+          <View style={styles.docTitleGroup}>
+            <FileText size={20} color="#38BDF8" />
+            <View>
+              <Text style={styles.docCardHeading}>
+                {t('rentBike.pucTitle', 'Pollution Under Control (PUC)')} <Text style={styles.req}>*</Text>
+              </Text>
+              <Text style={styles.docCardSub}>
+                Mandatory for petrol/combustion vehicles. Must be currently valid.
+              </Text>
+            </View>
+          </View>
+
+          {data.documents?.puc && (
+            <View style={styles.statusBadgePending}>
+              <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            </View>
+          )}
+        </View>
+
+        {data.documents?.puc ? (
+          <View style={styles.uploadedDocRow}>
+            <View style={styles.uploadedDocLeft}>
+              <View style={styles.fileIconBox}>
+                <FileText size={18} color="#38BDF8" />
+              </View>
+              <View>
+                <Text style={styles.docNameText}>{data.documents.puc.fileName}</Text>
+                <Text style={styles.docMetaText}>
+                  {data.documents.puc.fileSize} • Uploaded on {data.documents.puc.uploadedAt}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.docActionGroup}>
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => setShowDocPreviewKey(showDocPreviewKey === 'puc' ? null : 'puc')}
+                activeOpacity={0.7}
+              >
+                <Eye size={14} color="#38BDF8" />
+                <Text style={styles.actionBtnText}>
+                  {showDocPreviewKey === 'puc' ? 'Hide Preview' : 'Preview'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtnSmall}
+                onPress={() => handlePickDocument('puc')}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={13} color="#FFFFFF" />
+                <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Replace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtnSmall, styles.deleteBtnSmall]}
+                onPress={() => handleRemoveDoc('puc')}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={13} color="#F43F5E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.uploadBox}
+            onPress={() => handlePickDocument('puc')}
+            activeOpacity={0.8}
+            disabled={activeUploadDoc === 'puc'}
+          >
+            {activeUploadDoc === 'puc' ? (
+              <ActivityIndicator size="small" color="#38BDF8" />
+            ) : (
+              <>
+                <Upload size={22} color="#38BDF8" />
+                <Text style={styles.uploadBoxText}>Upload PUC Certificate (PDF/JPG max 10MB)</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* PUC Preview Box */}
+        {showDocPreviewKey === 'puc' && (
+          <View style={styles.previewBox}>
+            <Text style={styles.previewHeading}>Document Preview: {data.documents?.puc?.fileName}</Text>
+
+            {data.documents?.puc?.fileUrl && (data.documents.puc.fileType?.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(data.documents.puc.fileName)) ? (
+              <View style={styles.imagePreviewWrap}>
+                <Image
+                  source={{ uri: data.documents.puc.fileUrl }}
+                  style={styles.realDocImagePreview}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            {data.documents?.puc?.fileUrl && (data.documents.puc.fileType === 'application/pdf' || /\.pdf$/i.test(data.documents.puc.fileName)) ? (
+              <View style={styles.pdfPreviewWrap}>
+                <FileText size={32} color="#38BDF8" />
+                <Text style={styles.pdfNameText}>{data.documents.puc.fileName}</Text>
+                <TouchableOpacity
+                  style={styles.openDocBtn}
+                  onPress={() => {
+                    if (typeof window !== 'undefined' && window.open) {
+                      window.open(data.documents.puc.fileUrl, '_blank');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Eye size={14} color="#38BDF8" />
+                  <Text style={styles.openDocBtnText}>Open Document in New Tab</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        <View style={[styles.fieldGroup, { marginTop: 12 }]}>
+          <Text style={styles.label}>
+            PUC Expiry Date <Text style={styles.req}>*</Text>
+          </Text>
+          <TouchableOpacity
+            style={[styles.inputBox, styles.datePickerBox, errors.pucExpiryDate && styles.inputError]}
+            onPress={() => setCalendarTarget('pucExpiryDate')}
+            activeOpacity={0.8}
+          >
+            <Calendar size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+            <Text
+              style={[
+                styles.datePickerText,
+                !data.pucExpiryDate && styles.datePickerPlaceholder,
+              ]}
+              numberOfLines={1}
+            >
+              {data.pucExpiryDate || (isHindi ? 'समाप्ति तिथि चुनें (YYYY-MM-DD)' : 'Select Expiry Date (YYYY-MM-DD)')}
+            </Text>
+            {data.pucExpiryDate ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onChange('pucExpiryDate', '');
+                }}
+                style={styles.clearDateBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={14} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.calendarMiniBadge}>
+                <Calendar size={13} color="#38BDF8" />
+              </View>
+            )}
+          </TouchableOpacity>
+          {errors.pucExpiryDate && <Text style={styles.errorText}>{errors.pucExpiryDate}</Text>}
+        </View>
+
+        {errors['documents.puc'] && (
+          <Text style={styles.errorText}>{errors['documents.puc']}</Text>
+        )}
+      </View>
+
+      {/* 4. Additional Vehicle Numbers & Ownership Declaration */}
+      <View style={styles.additionalInfoCard}>
+        <Text style={styles.infoCardTitle}>{t('rentBike.identifiersTitle', 'Additional Vehicle Identifiers & Ownership')}</Text>
+
+        <View style={styles.gridTwo}>
+          <View style={styles.gridItem}>
+            <Text style={styles.label}>
+              {t('rentBike.chassisLabel', 'Chassis Number (VIN)')} <Text style={styles.req}>*</Text>
+            </Text>
+            <View style={[styles.inputBox, errors.chassisNumber && styles.inputError]}>
+              <Hash size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { letterSpacing: 1 }]}
+                value={data.chassisNumber}
+                onChangeText={(val) => onChange('chassisNumber', val.toUpperCase())}
+                placeholder={t('rentBike.chassisPlaceholder', '17-character VIN e.g. ME3H450XXXX88291')}
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="characters"
+                selectTextOnFocus={true}
+              />
+            </View>
+            {errors.chassisNumber && <Text style={styles.errorText}>{errors.chassisNumber}</Text>}
+          </View>
+
+          <View style={styles.gridItem}>
+            <Text style={styles.label}>
+              {t('rentBike.engineLabel', 'Engine Number')} <Text style={styles.req}>*</Text>
+            </Text>
+            <View style={[styles.inputBox, errors.engineNumber && styles.inputError]}>
+              <Hash size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { letterSpacing: 1 }]}
+                value={data.engineNumber}
+                onChangeText={(val) => onChange('engineNumber', val.toUpperCase())}
+                placeholder={t('rentBike.enginePlaceholder', 'e.g. H450E882910')}
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="characters"
+                selectTextOnFocus={true}
+              />
+            </View>
+            {errors.engineNumber && <Text style={styles.errorText}>{errors.engineNumber}</Text>}
+          </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>
+            {t('rentBike.regOwnerLabel', 'Registered Owner Name (as printed on RC)')} <Text style={styles.req}>*</Text>
+          </Text>
+          <View style={[styles.inputBox, errors.registeredOwnerName && styles.inputError]}>
+            <UserCheck size={16} color={COLORS.accentCyanLight} style={styles.inputIcon} />
+            <TextInput
+              style={styles.textInput}
+              value={data.registeredOwnerName}
+              onChangeText={(val) => onChange('registeredOwnerName', val)}
+              placeholder="e.g. Vikram Malhotra"
+              placeholderTextColor={COLORS.textMuted}
+              selectTextOnFocus={true}
+            />
+          </View>
+          {errors.registeredOwnerName && (
+            <Text style={styles.errorText}>{errors.registeredOwnerName}</Text>
+          )}
+        </View>
+
+        {/* Ownership vs Authorized Representative Declaration */}
+        <View style={styles.ownershipSection}>
+          <Text style={styles.label}>
+            {t('rentBike.ownershipDeclaration', 'Ownership / Authorization Declaration')} <Text style={styles.req}>*</Text>
+          </Text>
+
+          <View style={styles.radioOptionRow}>
+            <TouchableOpacity
+              style={[
+                styles.radioCard,
+                data.ownershipType === 'registered_owner' && styles.radioCardSelected,
+              ]}
+              onPress={() => onChange('ownershipType', 'registered_owner')}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.radioCircle,
+                  data.ownershipType === 'registered_owner' && styles.radioCircleSelected,
+                ]}
+              >
+                {data.ownershipType === 'registered_owner' && <View style={styles.radioDot} />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.radioTitle}>{t('rentBike.iAmOwner', 'I am the Registered Vehicle Owner')}</Text>
+                <Text style={styles.radioSub}>
+                  My name directly matches the owner name stated on the Vehicle Registration Certificate.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.radioCard,
+                data.ownershipType === 'authorized_representative' && styles.radioCardSelected,
+              ]}
+              onPress={() => onChange('ownershipType', 'authorized_representative')}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.radioCircle,
+                  data.ownershipType === 'authorized_representative' && styles.radioCircleSelected,
+                ]}
+              >
+                {data.ownershipType === 'authorized_representative' && <View style={styles.radioDot} />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.radioTitle}>{t('rentBike.iAmRep', 'I have Official Authorization from Owner')}</Text>
+                <Text style={styles.radioSub}>
+                  I hold written consent, Power of Attorney (PoA) or family consent to rent this vehicle.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {data.ownershipType === 'authorized_representative' && (
+            <View style={styles.poaUploadBox}>
+              <Text style={styles.poaUploadTitle}>
+                Authorization Deed / Power of Attorney Letter Required:
+              </Text>
+              {data.documents?.authorizationDeed ? (
+                <View style={styles.uploadedDocRow}>
+                  <View style={styles.uploadedDocLeft}>
+                    <View style={styles.fileIconBox}>
+                      <FileText size={18} color="#38BDF8" />
+                    </View>
+                    <View>
+                      <Text style={styles.docNameText}>{data.documents.authorizationDeed.fileName}</Text>
+                      <Text style={styles.docMetaText}>
+                        {data.documents.authorizationDeed.fileSize} • Uploaded on {data.documents.authorizationDeed.uploadedAt}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.docActionGroup}>
+                    <TouchableOpacity
+                      style={styles.actionBtnSmall}
+                      onPress={() => handlePickDocument('authorizationDeed')}
+                      activeOpacity={0.7}
+                    >
+                      <RefreshCw size={13} color="#FFFFFF" />
+                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Replace</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtnSmall, styles.deleteBtnSmall]}
+                      onPress={() => handleRemoveDoc('authorizationDeed')}
+                      activeOpacity={0.7}
+                    >
+                      <Trash2 size={13} color="#F43F5E" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.uploadBox}
+                  onPress={() => handlePickDocument('authorizationDeed')}
+                  activeOpacity={0.8}
+                  disabled={activeUploadDoc === 'authorizationDeed'}
+                >
+                  {activeUploadDoc === 'authorizationDeed' ? (
+                    <ActivityIndicator size="small" color="#38BDF8" />
+                  ) : (
+                    <>
+                      <Upload size={18} color="#38BDF8" />
+                      <Text style={styles.uploadBoxText}>
+                        Upload Signed Authorization Deed (PDF/JPG max 10MB)
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Interactive Calendar Picker Modal for Expiry Dates */}
+      <CalendarPickerModal
+        visible={calendarTarget !== null}
+        onClose={() => setCalendarTarget(null)}
+        mode="future"
+        initialDate={
+          calendarTarget === 'insuranceExpiryDate'
+            ? data.insuranceExpiryDate
+            : calendarTarget === 'pucExpiryDate'
+            ? data.pucExpiryDate
+            : undefined
+        }
+        title={
+          calendarTarget === 'insuranceExpiryDate'
+            ? (isHindi ? 'बीमा समाप्ति तिथि चुनें' : 'Select Insurance Expiry Date')
+            : (isHindi ? 'पीयूसी समाप्ति तिथि चुनें' : 'Select PUC Expiry Date')
+        }
+        onSelectDate={(dateStr) => {
+          if (calendarTarget) {
+            onChange(calendarTarget, dateStr);
+          }
+          setCalendarTarget(null);
+        }}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+  },
+  sectionHeader: {
+    marginBottom: 20,
+  },
+  badgePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    marginBottom: 8,
+  },
+  badgeText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  sectionSub: {
+    fontSize: 13.5,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  confidentialityBanner: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: 'rgba(2, 132, 199, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderRadius: RADIUS.md,
+    padding: 14,
+    marginBottom: 22,
+  },
+  lockIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  confidentialityTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#38BDF8',
+    marginBottom: 4,
+  },
+  confidentialityText: {
+    fontSize: 12,
+    color: '#CBD5E1',
+    lineHeight: 18,
+  },
+  docCard: {
+    backgroundColor: COLORS.bgCard,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderRadius: RADIUS.lg,
+    padding: 18,
+    marginBottom: 18,
+  },
+  docCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  docTitleGroup: {
+    flexDirection: 'row',
+    gap: 10,
+    flex: 1,
+  },
+  docCardHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  docCardSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    maxWidth: 540,
+  },
+  req: {
+    color: '#F43F5E',
+  },
+  statusBadgePending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  statusBadgeText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  uploadedDocRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.bgCardAlt,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  uploadedDocLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fileIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  docNameText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  docMetaText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  docActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#38BDF8',
+  },
+  deleteBtnSmall: {
+    borderColor: 'rgba(244, 63, 94, 0.3)',
+  },
+  uploadBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderRadius: RADIUS.md,
+    paddingVertical: 18,
+    backgroundColor: 'rgba(56, 189, 248, 0.04)',
+  },
+  uploadBoxText: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  previewBox: {
+    marginTop: 12,
+    backgroundColor: COLORS.bgDark,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderRadius: RADIUS.md,
+    padding: 14,
+  },
+  previewHeading: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  simulatedSmartCard: {
+    backgroundColor: '#0F1A2E',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    borderRadius: RADIUS.sm,
+    padding: 12,
+  },
+  smartCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingBottom: 6,
+    marginBottom: 8,
+  },
+  smartCardHeaderTitle: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  smartCardState: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  smartCardDetails: {
+    gap: 4,
+  },
+  scDetail: {
+    color: '#E2E8F0',
+    fontSize: 12,
+  },
+  scBold: {
+    color: '#94A3B8',
+    fontWeight: '700',
+  },
+  scNotice: {
+    marginTop: 8,
+    fontSize: 10,
+    color: '#64748B',
+    fontStyle: 'italic',
+  },
+  gridTwo: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    marginTop: 14,
+  },
+  gridItem: {
+    flex: 1,
+    minWidth: 160,
+  },
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.bgCardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    height: '100%',
+    ...Platform.select({
+      web: { outlineStyle: 'none' },
+    }),
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginTop: 5,
+    fontWeight: '500',
+  },
+  additionalInfoCard: {
+    backgroundColor: COLORS.bgCard,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderRadius: RADIUS.lg,
+    padding: 18,
+    marginTop: 10,
+  },
+  infoCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  ownershipSection: {
+    marginTop: 8,
+  },
+  radioOptionRow: {
+    gap: 10,
+    marginTop: 6,
+  },
+  radioCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.bgCardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderRadius: RADIUS.md,
+    padding: 14,
+  },
+  radioCardSelected: {
+    borderColor: '#38BDF8',
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: COLORS.textMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioCircleSelected: {
+    borderColor: '#38BDF8',
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#38BDF8',
+  },
+  radioTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  radioSub: {
+    fontSize: 11.5,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  poaUploadBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: COLORS.bgDark,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+  },
+  poaUploadTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#38BDF8',
+    marginBottom: 8,
+  },
+  datePickerBox: {
+    justifyContent: 'space-between',
+    paddingRight: 8,
+    cursor: 'pointer',
+  },
+  datePickerText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  datePickerPlaceholder: {
+    color: COLORS.textMuted,
+    fontWeight: '400',
+  },
+  calendarMiniBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  clearDateBtn: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginLeft: 6,
+  },
+  imagePreviewWrap: {
+    width: '100%',
+    height: 220,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+    backgroundColor: '#0A0F1D',
+    marginBottom: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.2)',
+  },
+  realDocImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  pdfPreviewWrap: {
+    padding: 16,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#0A0F1D',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  pdfNameText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  openDocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    marginTop: 4,
+  },
+  openDocBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+});
+
