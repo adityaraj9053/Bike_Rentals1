@@ -19,6 +19,9 @@ import ContactScreen from '../screens/ContactScreen';
 import BikeDetailsScreen from '../screens/BikeDetailsScreen';
 import BookingScreen from '../screens/BookingScreen';
 import RentBikeScreen from '../screens/RentBikeScreen';
+import MyBookingsScreen from '../screens/MyBookingsScreen';
+import UserDetailsScreen from '../screens/UserDetailsScreen';
+import BuyerDetailsScreen from '../screens/BuyerDetailsScreen';
 
 import CustomHeader from '../components/CustomHeader';
 
@@ -202,6 +205,7 @@ export default function RootNavigator({
   onRentBikePress,
   onOpenBookingDetails,
   onBookingConfirmed,
+  onSignOut,
 }) {
   const { t } = useLanguage();
   const isOwner = isOwnerUser(user);
@@ -265,6 +269,54 @@ export default function RootNavigator({
       </Stack.Screen>
 
       
+
+      <Stack.Screen
+        name="MyBookings"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <MyBookingsScreen
+            {...props}
+            user={user}
+            onSignOut={onSignOut}
+            onShowToast={onShowToast}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="UserDetails"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <UserDetailsScreen
+            {...props}
+            user={user}
+            onSignOut={onSignOut}
+            onShowToast={onShowToast}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="BuyerDetails"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <BuyerDetailsScreen
+            {...props}
+            user={user}
+            onSignOut={onSignOut}
+            onShowToast={onShowToast}
+          />
+        )}
+      </Stack.Screen>
 
       <Stack.Screen
         name="BikeDetails"

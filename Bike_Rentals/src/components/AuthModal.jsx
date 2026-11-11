@@ -631,6 +631,10 @@ export default function AuthModal({
     if (onClose) onClose();
   };
 
+  if (user) {
+    return null;
+  }
+
   return (
     <>
       <Modal

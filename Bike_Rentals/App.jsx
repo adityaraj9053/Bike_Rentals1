@@ -13,6 +13,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import BookDropdownModal from './src/components/BookDropdownModal';
 import EnquiryModal from './src/components/EnquiryModal';
 import AuthModal from './src/components/AuthModal';
+import NavigationSidebar from './src/components/NavigationSidebar';
 import QuoteModal from './src/components/QuoteModal';
 import FloatingWhatsApp from './src/components/FloatingWhatsApp';
 import Toast from './src/components/Toast';
@@ -131,6 +132,7 @@ export default function App() {
   const [enquiryBike, setEnquiryBike] = useState(null);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
   const [quoteData, setQuoteData] = useState(null);
@@ -442,10 +444,32 @@ export default function App() {
     }
   };
 
+  const handleOpenUserMenu = () => {
+    if (user) {
+      setIsSidebarOpen(true);
+    } else {
+      setIsAuthOpen(true);
+    }
+  };
+
+  const handleSignOut = () => {
+    authStorage.clear();
+    setUser(null);
+    setIsSidebarOpen(false);
+    setIsAuthOpen(false);
+    showToast('Signed out successfully.');
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Home');
+    }
+  };
+
   const handleUserUpdate = (userData) => {
     setUser(userData);
     if (userData) {
+      setIsAuthOpen(false);
       showToast(`Welcome back, ${userData.name}!`);
+      // Display navigation sidebar after signing in
+      setIsSidebarOpen(true);
       if (pendingBookingBike) {
         const target = pendingBookingBike;
         setPendingBookingBike(null);
@@ -455,6 +479,7 @@ export default function App() {
       }
     } else {
       setPendingBookingBike(null);
+      setIsSidebarOpen(false);
       showToast('Signed out successfully.');
     }
   };
@@ -538,7 +563,7 @@ export default function App() {
             <View style={styles.appContainer}>
               <RootNavigator
                 user={user}
-                onOpenAuth={() => setIsAuthOpen(true)}
+                onOpenAuth={handleOpenUserMenu}
                 onOpenWhatsApp={handleOpenWhatsApp}
                 onOpenQuote={handleOpenQuote}
                 onOpenBookingDetails={handleOpenBookingDetails}
@@ -549,6 +574,7 @@ export default function App() {
                 sharedBikes={sharedBikes}
                 onBikeSubmitted={handleBikeSubmitted}
                 onBookingConfirmed={handleBookingConfirmed}
+                onSignOut={handleSignOut}
               />
 
               {/* Floating WhatsApp Quick Action Button */}
@@ -591,6 +617,20 @@ export default function App() {
                     navigationRef.current.navigate('Motorbikes');
                   }
                 }}
+              />
+
+              {/* Navigation Sidebar Drawer for Authenticated Users */}
+              <NavigationSidebar
+                visible={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                user={user}
+                onNavigate={(screen) => {
+                  setIsSidebarOpen(false);
+                  if (navigationRef.current) {
+                    navigationRef.current.navigate(screen);
+                  }
+                }}
+                onSignOut={handleSignOut}
               />
 
               <QuoteModal
