@@ -132,9 +132,24 @@ export default function AuthModal({
 
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [demoCode, setDemoCode] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // OTP Resend Countdown Timer
+  useEffect(() => {
+    let interval = null;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [resendTimer]);
 
   // Expo AuthSession Hook for Google authentication
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest({
@@ -298,6 +313,8 @@ export default function AuthModal({
     setGoogleAgeError('');
     setOtp('');
     setOtpSent(false);
+    setDemoCode('');
+    setResendTimer(0);
     setErrorMsg('');
     setInfoMsg('');
     setIsGoogleLoading(false);
@@ -307,6 +324,8 @@ export default function AuthModal({
   const resetOtpOnly = () => {
     setOtp('');
     setOtpSent(false);
+    setDemoCode('');
+    setResendTimer(0);
     setErrorMsg('');
     setInfoMsg('');
   };
@@ -398,6 +417,10 @@ export default function AuthModal({
     try {
       const res = await authAPI.sendOtp(cleanEmail, userExistsInDb ? 'LOGIN' : (activeTab === 'signup' ? 'SIGNUP' : 'LOGIN'));
       setOtpSent(true);
+      setResendTimer(30);
+      if (res?.demoCode) {
+        setDemoCode(res.demoCode);
+      }
       if (res?.isExistingUser && activeTab === 'signup') {
         setActiveTab('signin');
       }
@@ -410,10 +433,12 @@ export default function AuthModal({
     } catch (err) {
       // Fallback in case of network issue
       setOtpSent(true);
+      setDemoCode('123456');
+      setResendTimer(30);
       setInfoMsg(
         isHindi
-          ? `सत्यापन कोड ${cleanEmail} पर भेजा गया! (डेमो कोड: 1234)`
-          : `Verification code sent to ${cleanEmail}! (Demo Code: 1234)`
+          ? `सत्यापन कोड ${cleanEmail} पर भेजा गया! (डेमो कोड: 123456)`
+          : `Verification code sent to ${cleanEmail}! (Demo Code: 123456)`
       );
     }
   };
@@ -421,10 +446,9 @@ export default function AuthModal({
   const handleVerifyAndSubmit = async () => {
     setErrorMsg('');
     const submittedOtp = (otp || '').trim();
-    setOtp('');
 
-    if (!submittedOtp || submittedOtp.length < 4) {
-      setErrorMsg(t('auth.enterOtpErr', 'Please enter the 4-digit verification code.'));
+    if (!submittedOtp || (submittedOtp.length !== 6 && submittedOtp.length !== 4)) {
+      setErrorMsg(t('auth.enterOtpErr', 'Please enter the 6-digit verification code.'));
       return;
     }
 
@@ -469,7 +493,7 @@ export default function AuthModal({
       if (onLogin) onLogin(loggedUser);
       if (onClose) onClose();
     } catch (err) {
-      if (submittedOtp === '1234') {
+      if (submittedOtp === '1234' || submittedOtp === '123456' || (demoCode && submittedOtp === demoCode)) {
         const fallbackId = `user_${email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
         const fallbackUser = {
           id: fallbackId,
@@ -1156,26 +1180,39 @@ export default function AuthModal({
 
                         <View style={styles.inputGroup}>
                           <Text style={styles.inputLabel}>
-                            {t('auth.enterOtp', 'ENTER 4-DIGIT EMAIL OTP')}
+                            {t('auth.enterOtp', 'ENTER 6-DIGIT EMAIL OTP')}
                           </Text>
                           <TextInput
                             style={[styles.textInput, styles.otpInput]}
-                            placeholder="• • • •"
+                            placeholder="• • • • • •"
                             placeholderTextColor="#475569"
                             value={otp}
-                            onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 4))}
+                            onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 6))}
                             keyboardType="number-pad"
-                            maxLength={4}
+                            maxLength={6}
                             autoFocus
                           />
                         </View>
 
                         <View style={styles.otpLinksRow}>
-                          <TouchableOpacity onPress={() => setOtp('1234')}>
+                          <TouchableOpacity onPress={() => setOtp(demoCode || '123456')}>
                             <Text style={styles.otpDemoLink}>
-                              {isHindi ? 'डेमो कोड भरें (1234)' : 'Fill Demo Code (1234)'}
+                              {demoCode ? (isHindi ? `कोड भरें (${demoCode})` : `Fill Code (${demoCode})`) : (isHindi ? 'डेमो कोड भरें (123456)' : 'Fill Demo Code (123456)')}
                             </Text>
                           </TouchableOpacity>
+
+                          {resendTimer > 0 ? (
+                            <Text style={styles.otpResendTimer}>
+                              {isHindi ? `पुनः भेजें (${resendTimer}s)` : `Resend in ${resendTimer}s`}
+                            </Text>
+                          ) : (
+                            <TouchableOpacity onPress={handleSendCode}>
+                              <Text style={styles.otpResendActive}>
+                                {isHindi ? 'कोड पुनः भेजें' : 'Resend Code'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+
                           <TouchableOpacity onPress={() => resetOtpOnly()}>
                             <Text style={styles.otpChangeLink}>
                               {isHindi ? 'ईमेल बदलें' : 'Change Email'}
@@ -1699,6 +1736,16 @@ const styles = StyleSheet.create({
   },
   otpDemoLink: {
     color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  otpResendTimer: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  otpResendActive: {
+    color: '#F97316',
     fontSize: 12,
     fontWeight: '700',
   },

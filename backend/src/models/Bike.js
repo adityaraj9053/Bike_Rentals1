@@ -102,14 +102,14 @@ const BikeSchema = new Schema({
   rating: { type: Number, default: 5.0 },
   reviewsCount: { type: Number, default: 0 },
   status: { type: String, default: 'APPROVED', index: true },
-  listingCode: { type: String, index: true },
+  listingCode: { type: String, unique: true },
 }, {
   timestamps: true,
   versionKey: false,
 });
 
 // Full-text search index
-BikeSchema.index({ name: 'text', brand: 'text', model: 'text', category: 'text' });
+BikeSchema.index({ brand: 'text', model: 'text', category: 'text', pickupAddress: 'text' });
 BikeSchema.index({ isBooked: 1, category: 1, dailyPrice: 1 });
 
 export const BikeModel = mongoose.models.Bike || mongoose.model('Bike', BikeSchema);
