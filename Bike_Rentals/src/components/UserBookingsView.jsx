@@ -256,10 +256,11 @@ export default function UserBookingsView({
             const timeRemaining = getTimeRemaining(b.returnDatetime);
 
             // Official Bike Documents
-            const bikeDocs = b.bikeDocuments || bike.documents || {};
-            const rcDoc = bikeDocs.rcSmartCardUrl || bikeDocs.rc;
-            const pucDoc = bikeDocs.pucCertificateUrl || bikeDocs.puc;
-            const insDoc = bikeDocs.insurancePolicyUrl || bikeDocs.insurance;
+            const bikeDocs = b.bikeDocuments || bike.documents || b.documents || {};
+            const regNo = bike.registrationNumber || bike._id || bike.id || '';
+            const rcDoc = bikeDocs.rcSmartCardUrl || bikeDocs.rc || (regNo ? `/api/documents/file/${encodeURIComponent(regNo)}/rc` : null);
+            const pucDoc = bikeDocs.pucCertificateUrl || bikeDocs.puc || (regNo ? `/api/documents/file/${encodeURIComponent(regNo)}/puc` : null);
+            const insDoc = bikeDocs.insurancePolicyUrl || bikeDocs.insurance || bikeDocs.insurancePolicy || (regNo ? `/api/documents/file/${encodeURIComponent(regNo)}/insurance` : null);
 
             return (
               <View key={b._id || b.id || `my-booking-${idx}`} style={styles.bookingCard}>
@@ -344,15 +345,15 @@ export default function UserBookingsView({
                       </View>
                     </View>
                   ) : (
-                    /* Active Rental: User can view RC & PUC documents */
+                    /* Active Rental: User can view RC, Insurance & PUC documents */
                     <View style={styles.docsGrid}>
                       {/* RC Document */}
                       <View style={styles.docItemCard}>
                         <View style={styles.docHeaderRow}>
-                          <FileText size={15} color="#38BDF8" />
-                          <Text style={styles.docItemTitle}>RC Smart Card</Text>
+                          <FileText size={14} color="#38BDF8" />
+                          <Text style={styles.docItemTitle} numberOfLines={1}>RC Smart Card</Text>
                         </View>
-                        <Text style={styles.docItemSub}>Registration Certificate</Text>
+                        <Text style={styles.docItemSub} numberOfLines={1}>Registration</Text>
                         <TouchableOpacity
                           style={styles.viewDocBtn}
                           onPress={() =>
@@ -369,13 +370,36 @@ export default function UserBookingsView({
                         </TouchableOpacity>
                       </View>
 
+                      {/* Insurance Certificate */}
+                      <View style={styles.docItemCard}>
+                        <View style={styles.docHeaderRow}>
+                          <ShieldCheck size={14} color="#38BDF8" />
+                          <Text style={styles.docItemTitle} numberOfLines={1}>Insurance</Text>
+                        </View>
+                        <Text style={styles.docItemSub} numberOfLines={1}>Policy Certificate</Text>
+                        <TouchableOpacity
+                          style={styles.viewDocBtn}
+                          onPress={() =>
+                            handleOpenDoc(
+                              `${bikeName} - Insurance Policy`,
+                              insDoc,
+                              `Insurance_${bike.registrationNumber || 'Vehicle'}.pdf`
+                            )
+                          }
+                          activeOpacity={0.8}
+                        >
+                          <Eye size={12} color="#38BDF8" />
+                          <Text style={styles.viewDocBtnText}>View Policy</Text>
+                        </TouchableOpacity>
+                      </View>
+
                       {/* PUC Certificate */}
                       <View style={styles.docItemCard}>
                         <View style={styles.docHeaderRow}>
-                          <FileText size={15} color="#38BDF8" />
-                          <Text style={styles.docItemTitle}>PUC Certificate</Text>
+                          <FileText size={14} color="#38BDF8" />
+                          <Text style={styles.docItemTitle} numberOfLines={1}>PUC</Text>
                         </View>
-                        <Text style={styles.docItemSub}>Pollution Valid</Text>
+                        <Text style={styles.docItemSub} numberOfLines={1}>Pollution Valid</Text>
                         <TouchableOpacity
                           style={styles.viewDocBtn}
                           onPress={() =>
@@ -754,12 +778,14 @@ const styles = StyleSheet.create({
   },
   docsGrid: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   docItemCard: {
     flex: 1,
+    minWidth: 95,
     backgroundColor: 'rgba(2, 6, 23, 0.6)',
-    padding: 10,
+    padding: 8,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
