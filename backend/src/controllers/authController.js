@@ -51,6 +51,7 @@ export async function sendOtp(req, res) {
 
     // Send OTP Email via Nodemailer (StudyPro mechanism)
     let emailSent = false;
+    let mailErrorMsg = '';
     try {
       const emailSubject = purpose === 'SIGNUP' 
         ? 'Verification Code - The Road Eagle' 
@@ -59,6 +60,7 @@ export async function sendOtp(req, res) {
       emailSent = true;
       console.log(`[Email OTP] Email successfully sent to ${cleanEmail}`);
     } catch (mailError) {
+      mailErrorMsg = mailError.message;
       console.error(`[Email OTP] Mail send failed for ${cleanEmail}:`, mailError.message);
       // In development or if mail delivery has issues, we still allow demoCode so the user is never blocked
     }
@@ -74,9 +76,10 @@ export async function sendOtp(req, res) {
       emailSent,
       message: emailSent
         ? `Verification code sent to ${cleanEmail}. Valid for 5 minutes.`
-        : `Verification code sent! (Use code: ${rawOtp} if email is delayed)`,
+        : `Verification code sent! (Use code: ${rawOtp} if email delivery is delayed)`,
       // Return demoCode for seamless testing & fallback
       demoCode: rawOtp,
+      mailError: mailErrorMsg || undefined,
     });
   } catch (error) {
     console.error('[Auth sendOtp Error]:', error);

@@ -437,12 +437,20 @@ export default function AuthModal({
       if (res?.isExistingUser && activeTab === 'signup') {
         setActiveTab('signin');
       }
-      const codeNotice = res?.demoCode ? ` (Code: ${res.demoCode})` : '';
-      setInfoMsg(
-        isHindi
-          ? `सत्यापन कोड ${cleanEmail} पर भेजा गया!${codeNotice}`
-          : `Verification code sent to ${cleanEmail}!${codeNotice}`
-      );
+      if (res?.emailSent === false && res?.demoCode) {
+        setInfoMsg(
+          isHindi
+            ? `क्लाउड होस्ट पर ईमेल सीमित है। आपका सत्यापन कोड है: ${res.demoCode}`
+            : `Email blocked by cloud host firewall. Use code: ${res.demoCode}`
+        );
+      } else {
+        const codeNotice = res?.demoCode ? ` (Code: ${res.demoCode})` : '';
+        setInfoMsg(
+          isHindi
+            ? `सत्यापन कोड ${cleanEmail} पर भेजा गया!${codeNotice}`
+            : `Verification code sent to ${cleanEmail}!${codeNotice}`
+        );
+      }
     } catch (err) {
       console.error('[AuthModal] OTP send error, falling back to instant verification screen:', err);
       // Fallback: ALWAYS transition to OTP screen so the user is never stuck
