@@ -1,35 +1,53 @@
 import { Platform } from 'react-native';
 
-// Resolve the backend URL using import.meta.env.VITE_BACKEND_URL with local development fallbacks
-const getRawBackendUrl = () => {
+// Deployed production backend URL (Render)
+const PRODUCTION_BACKEND_URL = 'https://bike-rentals1.onrender.com';
+
+// Dynamic backend URL resolution supporting Expo, Vite, Vercel, and local dev
+const resolveBackendUrl = () => {
+  // 1. Direct Expo public environment variables (statically inlined by Metro bundler at build time)
+  const expoBackend = process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL;
+  if (expoBackend && typeof expoBackend === 'string' && expoBackend.trim().length > 0) {
+    return expoBackend.trim();
+  }
+
+  // 2. Direct Vite / Metro environment variables (if inlined by bundler)
   try {
-    if (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_BACKEND_URL) {
-      return import.meta.env.VITE_BACKEND_URL;
+    const viteEnv =
+      (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_BACKEND_URL) ||
+      process.env.VITE_BACKEND_URL;
+    if (viteEnv && typeof viteEnv === 'string' && viteEnv.trim().length > 0) {
+      return viteEnv.trim();
     }
   } catch (e) {}
 
-  if (typeof process !== 'undefined' && process?.env) {
-    if (process.env.VITE_BACKEND_URL) return process.env.VITE_BACKEND_URL;
-    if (process.env.EXPO_PUBLIC_BACKEND_URL) return process.env.EXPO_PUBLIC_BACKEND_URL;
-    if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
+  // 3. Web runtime environment detection: If running in production (e.g., bikeagle.vercel.app or any remote host),
+  // NEVER attempt to connect to localhost:5000 — always use the deployed Render backend.
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname || '';
+    const isLocalhost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local');
+
+    if (!isLocalhost && hostname.length > 0) {
+      return PRODUCTION_BACKEND_URL;
+    }
   }
 
-  return '';
-};
-
-// Default fallback URL for local development
-const getDefaultLocalUrl = () => {
+  // 4. Fallback for Android emulator
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:5000';
   }
+
+  // 5. Fallback for local web development
   return 'http://localhost:5000';
 };
 
 // Root Backend URL (e.g., https://bike-rentals1.onrender.com or http://localhost:5000)
 export const BACKEND_URL = (() => {
-  const envUrl = getRawBackendUrl();
-  const raw = (envUrl || getDefaultLocalUrl()).trim();
-  // Strip trailing slashes
+  const raw = resolveBackendUrl();
   return raw.replace(/\/+$/, '');
 })();
 
