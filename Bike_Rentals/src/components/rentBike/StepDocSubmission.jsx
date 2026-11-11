@@ -49,6 +49,31 @@ export default function StepDocSubmission({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const handleOpenDocumentExternal = async (docObj) => {
+    if (typeof window === 'undefined' || !window.open || !docObj) return;
+
+    const rawUrl = docObj.fileUrl || docObj.signedUrl || docObj.key || docObj.fileName;
+    if (!rawUrl) return;
+
+    if (rawUrl.startsWith('https://') || rawUrl.startsWith('http://') || rawUrl.startsWith('blob:')) {
+      window.open(rawUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    try {
+      const res = await documentsAPI.getSignedUrl(rawUrl);
+      if (res && res.data && res.data.signedUrl) {
+        window.open(res.data.signedUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+    } catch (e) {
+      console.warn('[DocSubmission] Signed URL lookup error:', e);
+    }
+
+    const fallbackUrl = documentsAPI.getDirectViewUrl(rawUrl);
+    window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+  };
+
   /**
    * Upload real document file selected from local PC
    */
@@ -296,11 +321,7 @@ export default function StepDocSubmission({
                 <Text style={styles.pdfNameText}>{data.documents.rc.fileName}</Text>
                 <TouchableOpacity
                   style={styles.openDocBtn}
-                  onPress={() => {
-                    if (typeof window !== 'undefined' && window.open) {
-                      window.open(data.documents.rc.fileUrl, '_blank');
-                    }
-                  }}
+                  onPress={() => handleOpenDocumentExternal(data.documents?.rc)}
                   activeOpacity={0.8}
                 >
                   <Eye size={14} color="#38BDF8" />
@@ -433,11 +454,7 @@ export default function StepDocSubmission({
                 <Text style={styles.pdfNameText}>{data.documents.insurance.fileName}</Text>
                 <TouchableOpacity
                   style={styles.openDocBtn}
-                  onPress={() => {
-                    if (typeof window !== 'undefined' && window.open) {
-                      window.open(data.documents.insurance.fileUrl, '_blank');
-                    }
-                  }}
+                  onPress={() => handleOpenDocumentExternal(data.documents?.insurance)}
                   activeOpacity={0.8}
                 >
                   <Eye size={14} color="#38BDF8" />
@@ -620,11 +637,7 @@ export default function StepDocSubmission({
                 <Text style={styles.pdfNameText}>{data.documents.puc.fileName}</Text>
                 <TouchableOpacity
                   style={styles.openDocBtn}
-                  onPress={() => {
-                    if (typeof window !== 'undefined' && window.open) {
-                      window.open(data.documents.puc.fileUrl, '_blank');
-                    }
-                  }}
+                  onPress={() => handleOpenDocumentExternal(data.documents?.puc)}
                   activeOpacity={0.8}
                 >
                   <Eye size={14} color="#38BDF8" />

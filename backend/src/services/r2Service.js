@@ -3,6 +3,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
@@ -29,9 +30,17 @@ export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB limit
 // Document types allowed for users and bikes
 export const VALID_USER_DOC_TYPES = {
   aadhaar: 'aadhaar',
+  'aadhaar card': 'aadhaar',
+  aadhaarcard: 'aadhaar',
   'driving-licence': 'driving-licence',
-  'driving-license': 'driving-licence', // Alias
-  dl: 'driving-licence', // Alias
+  'driving-license': 'driving-licence',
+  drivinglicence: 'driving-licence',
+  drivinglicense: 'driving-licence',
+  driving_licence: 'driving-licence',
+  driving_license: 'driving-licence',
+  'driving licence': 'driving-licence',
+  'driving license': 'driving-licence',
+  dl: 'driving-licence',
 };
 
 export const VALID_BIKE_DOC_TYPES = {
@@ -285,4 +294,236 @@ export async function documentExistsInR2(key) {
     throw err;
   }
 }
+
+/**
+ * Scan R2 bucket to find the latest uploaded document key for a bike
+ * @param {string} bikeId - Bike ID or registration number
+ * @param {string} docType - 'rc' | 'insurance' | 'puc'
+ * @returns {Promise<string|null>} Found R2 key or null
+ */
+export async function findBikeDocumentKey(bikeId, docType) {
+  if (!isR2Configured() || !bikeId || !docType) return null;
+
+  try {
+    const normalizedType = VALID_BIKE_DOC_TYPES[docType.toLowerCase().trim()] || docType.toLowerCase().trim();
+    const prefix = `documents/bikes/${bikeId.trim()}/${normalizedType}/`;
+
+    const res = await r2Client.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: prefix,
+        MaxKeys: 10,
+      })
+    );
+
+    const contents = res.Contents || [];
+    if (contents.length === 0) return null;
+
+    // Sort by LastModified descending to get the newest file
+    contents.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
+    return contents[0].Key;
+  } catch (err) {
+    console.warn(`[findBikeDocumentKey] Warning for ${bikeId}/${docType}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Scan R2 bucket to find the latest uploaded document key for a user
+ * @param {string} userId - User ID
+ * @param {string} docType - 'aadhaar' | 'driving-licence'
+ * @returns {Promise<string|null>} Found R2 key or null
+ */
+export async function findUserDocumentKey(userId, docType) {
+  if (!isR2Configured() || !userId || !docType) return null;
+
+  try {
+    const normalizedType = VALID_USER_DOC_TYPES[docType.toLowerCase().trim()] || docType.toLowerCase().trim();
+    const prefix = `documents/users/${userId.trim()}/${normalizedType}/`;
+
+    const res = await r2Client.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: prefix,
+        MaxKeys: 10,
+      })
+    );
+
+    const contents = res.Contents || [];
+    if (contents.length === 0) return null;
+
+    contents.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
+    return contents[0].Key;
+  } catch (err) {
+    console.warn(`[findUserDocumentKey] Warning for ${userId}/${docType}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Search Cloudflare R2 bucket for any document matching a filename or partial name
+ * @param {string} rawFilename - Original file name (e.g. "Screenshot 2026-11-11 120511.png")
+ * @param {string} [bikeOrUserId=null] - Optional bike or user identifier to narrow search
+ * @param {string} [docType=null] - Optional docType to narrow search
+ * @returns {Promise<string|null>} Found R2 key or null
+ */
+export async function findDocumentKeyByFilename(rawFilename, bikeOrUserId = null, docType = null) {
+  if (!isR2Configured() || !rawFilename || typeof rawFilename !== 'string') return null;
+
+  try {
+    let decodedRaw = rawFilename.trim();
+    try {
+      decodedRaw = decodeURIComponent(decodedRaw);
+    } catch (e) {}
+
+    // Extract bare filename if a path or url was passed
+    const cleanRaw = path.basename(decodedRaw.replace(/^https?:\/\/[^\/]+\//, ''));
+    if (!cleanRaw) return null;
+
+    const ext = path.extname(cleanRaw).toLowerCase();
+    const base = path.basename(cleanRaw, ext);
+    const sanitizedBase = base.replace(/[^a-zA-Z0-9]/g, '_');
+
+    let prefix = 'documents/';
+    if (bikeOrUserId && docType) {
+      const normDoc = VALID_BIKE_DOC_TYPES[docType.toLowerCase()] || VALID_USER_DOC_TYPES[docType.toLowerCase()] || docType.toLowerCase();
+      prefix = `documents/bikes/${bikeOrUserId.trim()}/${normDoc}/`;
+    } else if (bikeOrUserId) {
+      prefix = `documents/bikes/${bikeOrUserId.trim()}/`;
+    }
+
+    const res = await r2Client.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: prefix,
+        MaxKeys: 100,
+      })
+    );
+
+    const contents = res.Contents || [];
+    if (contents.length === 0 && prefix !== 'documents/') {
+      const fallbackRes = await r2Client.send(
+        new ListObjectsV2Command({
+          Bucket: R2_BUCKET_NAME,
+          Prefix: 'documents/',
+          MaxKeys: 100,
+        })
+      );
+      contents.push(...(fallbackRes.Contents || []));
+    }
+
+    const matches = contents.filter((item) => {
+      const k = item.Key;
+      if (k.includes(cleanRaw)) return true;
+      const cleanKey = k.replace(/[^a-zA-Z0-9]/g, '_');
+      if (sanitizedBase.length >= 3 && cleanKey.includes(sanitizedBase)) return true;
+      return false;
+    });
+
+    if (matches.length > 0) {
+      matches.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
+      return matches[0].Key;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('[findDocumentKeyByFilename] Search error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Robustly resolve any document reference (key, partial filename, or bikeId+docType) into a live signed URL
+ * @param {string} keyOrValue - Existing stored value (can be an R2 key, a signed URL, or a filename)
+ * @param {string} [bikeId=null] - Optional bike identifier for lookup fallback
+ * @param {string} [docType=null] - Optional docType ('rc', 'insurance', 'puc')
+ * @param {number} [expiresInSeconds=900] - Expiry in seconds (15 min)
+ * @returns {Promise<string|null>}
+ */
+export async function resolveDocumentSignedUrl(
+  keyOrValue,
+  bikeId = null,
+  docType = null,
+  expiresInSeconds = 900
+) {
+  if (!isR2Configured()) return null;
+
+  if (!keyOrValue && !bikeId && !docType) return null;
+
+  let decodedValue = '';
+  if (typeof keyOrValue === 'string') {
+    try {
+      decodedValue = decodeURIComponent(keyOrValue.trim());
+    } catch (e) {
+      decodedValue = keyOrValue.trim();
+    }
+  }
+
+  // Strip leading slashes
+  const strippedValue = decodedValue.replace(/^\/+/, '');
+
+  // 1. If already a valid live full URL starting with http/https
+  if (strippedValue.startsWith('https://') || strippedValue.startsWith('http://')) {
+    const r2Match = strippedValue.match(/\/documents\/(bikes|users)\/[^?]+/);
+    if (r2Match) {
+      const extractedKey = `documents/${r2Match[1]}/${strippedValue.split(`/documents/${r2Match[1]}/`)[1].split('?')[0]}`;
+      try {
+        return await getSignedDocumentUrl(extractedKey, expiresInSeconds);
+      } catch (e) {
+        return strippedValue;
+      }
+    }
+
+    // If it's a localhost link (e.g. http://localhost:8081/Screenshot...png or localhost:5000/...)
+    if (strippedValue.includes('localhost:') || strippedValue.includes('127.0.0.1:')) {
+      const extractedBasename = path.basename(strippedValue.split('?')[0]);
+      if (extractedBasename) {
+        const found = await findDocumentKeyByFilename(extractedBasename, bikeId, docType);
+        if (found) {
+          try {
+            return await getSignedDocumentUrl(found, expiresInSeconds);
+          } catch (e) {}
+        }
+      }
+    } else {
+      return strippedValue;
+    }
+  }
+
+  // 2. If it's an exact R2 key (e.g. documents/bikes/... or documents/users/...)
+  if (strippedValue.startsWith('documents/')) {
+    try {
+      return await getSignedDocumentUrl(strippedValue, expiresInSeconds);
+    } catch (e) {
+      console.warn(`[resolveDocumentSignedUrl] Failed to sign key "${strippedValue}":`, e.message);
+    }
+  }
+
+  // 3. If we have bikeId and docType, search R2 directly
+  if (bikeId && docType) {
+    const foundKey = await findBikeDocumentKey(bikeId, docType);
+    if (foundKey) {
+      try {
+        return await getSignedDocumentUrl(foundKey, expiresInSeconds);
+      } catch (e) {
+        console.warn(`[resolveDocumentSignedUrl] Failed to sign found key "${foundKey}":`, e.message);
+      }
+    }
+  }
+
+  // 4. If keyOrValue is a plain filename or partial path
+  if (strippedValue) {
+    const foundByFilename = await findDocumentKeyByFilename(strippedValue, bikeId, docType);
+    if (foundByFilename) {
+      try {
+        return await getSignedDocumentUrl(foundByFilename, expiresInSeconds);
+      } catch (e) {
+        console.warn(`[resolveDocumentSignedUrl] Failed to sign key "${foundByFilename}":`, e.message);
+      }
+    }
+  }
+
+  return null;
+}
+
 

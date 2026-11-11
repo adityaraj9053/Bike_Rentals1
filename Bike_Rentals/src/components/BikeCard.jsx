@@ -36,13 +36,22 @@ export default function BikeCard({
   )?.trim()?.toLowerCase();
   const userEmail = activeUser?.email?.trim()?.toLowerCase();
 
+  const hasActiveBooking = Boolean(
+    bike.currentBookingId &&
+    (typeof bike.currentBookingId === 'object'
+      ? Boolean(bike.currentBookingId._id || Object.keys(bike.currentBookingId).length > 0)
+      : Boolean(bike.currentBookingId))
+  );
+
   const isMyBookedBike = Boolean(
-    bike.isBooked && (
+    bike.isBooked &&
+    hasActiveBooking && (
       (currentUserId && bookedUserId && String(bookedUserId) === String(currentUserId)) ||
-      (userEmail && bookedUserEmail && userEmail === bookedUserEmail)
+      (userEmail && bookedUserEmail && userEmail === bookedUserEmail) ||
+      bike.isMyBooking
     )
   );
-  const isOwnerViewing = Boolean(activeUser?.role === 'OWNER' && bike.isBooked);
+  const isOwnerViewing = Boolean(activeUser?.role === 'OWNER' && bike.isBooked && hasActiveBooking);
 
   const price = Number(bike.pricePerDay ?? bike.dailyPrice ?? 0);
   const deposit = Number(bike.deposit ?? bike.securityDeposit ?? 0);

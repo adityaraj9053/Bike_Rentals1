@@ -172,7 +172,12 @@ export const bookingsAPI = {
 
   getOwnerDashboard: () => request('/bookings/owner-dashboard'),
 
-  getMyBookings: () => request('/bookings/my-bookings'),
+  getMyBookings: (params = {}) => {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return request(`/bookings/my-bookings${query ? `?${query}` : ''}`);
+  },
 
   markReturned: (id) =>
     request(`/bookings/${id}/return`, {
@@ -328,6 +333,18 @@ export const documentsAPI = {
       method: 'DELETE',
       body: JSON.stringify({ key }),
     }),
+  getDirectViewUrl: (keyOrUrl) => {
+    if (!keyOrUrl) return '';
+    if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://') || keyOrUrl.startsWith('blob:')) {
+      return keyOrUrl;
+    }
+    const backendBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+    return `${backendBase}/api/documents/open?key=${encodeURIComponent(keyOrUrl)}`;
+  },
+  getFileByBikeUrl: (bikeId, docType) => {
+    const backendBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+    return `${backendBase}/api/documents/file/${encodeURIComponent(bikeId)}/${encodeURIComponent(docType)}`;
+  },
 };
 
 // 11. Razorpay Payment APIs

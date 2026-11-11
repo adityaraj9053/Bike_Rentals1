@@ -27,7 +27,7 @@ import {
   ExternalLink,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../theme/colors';
-import { bookingsAPI } from '../services/api';
+import { bookingsAPI, authStorage } from '../services/api';
 import DocumentPreviewModal from './DocumentPreviewModal';
 
 export default function UserBookingsView({
@@ -44,24 +44,59 @@ export default function UserBookingsView({
   const fetchUserBookings = async () => {
     setLoading(true);
     try {
-      const res = await bookingsAPI.getMyBookings().catch(() => null);
+      const activeUser = user || authStorage.getUser() || {};
+      const userEmail = (activeUser.email || '').trim().toLowerCase();
+      const userId = activeUser.id || activeUser._id;
 
-      let list = [];
-      if (res && res.data) {
-        list = res.data;
-      } else {
-        // Fallback: load from localStorage cache if offline
-        if (typeof window !== 'undefined' && window.localStorage) {
+      // Request server bookings with explicit email & userId query parameters as fallbacks
+      const res = await bookingsAPI.getMyBookings({
+        email: userEmail,
+        userId: userId,
+      }).catch((err) => {
+        console.warn('[UserBookingsView] API notice:', err.message);
+        return null;
+      });
+
+      const serverList = (res && Array.isArray(res.data)) ? res.data : [];
+
+      // Also read locally cached bookings
+      let cachedList = [];
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
           const cached = window.localStorage.getItem('my_user_bookings');
           if (cached) {
-            try {
-              list = JSON.parse(cached);
-            } catch (e) {}
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed)) {
+              cachedList = parsed;
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Merge serverList and cachedList without duplicates
+      const combined = [...serverList];
+      const seenCodes = new Set(
+        serverList.map((b) => String(b.bookingCode || b._id || b.id || '').trim().toUpperCase())
+      );
+
+      for (const item of cachedList) {
+        const itemCode = String(item.bookingCode || item._id || item.id || '').trim().toUpperCase();
+        if (itemCode && !seenCodes.has(itemCode)) {
+          // If active user email is known, only include if matches or if no email filter
+          const itemEmail = (item.riderDetails?.email || item.email || '').trim().toLowerCase();
+          if (!userEmail || !itemEmail || itemEmail === userEmail) {
+            combined.push(item);
+            seenCodes.add(itemCode);
           }
         }
       }
 
-      setBookings(list || []);
+      setBookings(combined);
+
+      // Refresh cache with active merged list
+      if (typeof window !== 'undefined' && window.localStorage && combined.length > 0) {
+        window.localStorage.setItem('my_user_bookings', JSON.stringify(combined));
+      }
     } catch (err) {
       console.warn('[UserBookingsView] Error:', err.message);
     } finally {
@@ -74,19 +109,25 @@ export default function UserBookingsView({
     // Refresh periodically
     const interval = setInterval(fetchUserBookings, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.email, user?.id, user?._id]);
 
   const handleOpenDoc = (title, docUrl, fallbackName) => {
     if (!docUrl) {
       if (onShowToast) onShowToast('Document preview not available.');
       return;
     }
-    const finalUrl = typeof docUrl === 'string' ? docUrl : (docUrl.signedUrl || docUrl.url || docUrl.fileUrl);
+    const finalUrl =
+      typeof docUrl === 'string'
+        ? docUrl
+        : (docUrl.signedUrl || docUrl.fileUrl || docUrl.url || docUrl.key || docUrl.fileName);
+    const fileName =
+      (typeof docUrl === 'object' && (docUrl.fileName || docUrl.name)) ||
+      (typeof docUrl === 'string' ? docUrl : fallbackName);
 
     setSelectedDoc({
       title,
-      url: finalUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800',
-      fileName: fallbackName,
+      url: finalUrl || fileName,
+      fileName,
     });
     setIsDocModalVisible(true);
   };

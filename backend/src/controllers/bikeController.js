@@ -6,6 +6,10 @@ import {
   deleteMultipleImagesFromCloudinary,
   extractPublicId,
 } from '../services/cloudinaryService.js';
+import {
+  findBikeDocumentKey,
+  resolveDocumentSignedUrl,
+} from '../services/r2Service.js';
 
 /**
  * Section 5: Dynamic Fleet Visibility Logic (Query Layer)
@@ -18,8 +22,8 @@ export async function getAllBikes(req, res) {
     if (mongoose.connection.readyState !== 1) {
       return res.status(200).json({ success: true, count: 0, data: [], offline: true });
     }
-    const currentUserId = req.user?._id || req.user?.id;
-    const currentUserEmail = req.user?.email;
+    const currentUserId = req.user?._id || req.user?.id || req.query.userId;
+    const currentUserEmail = (req.user?.email || req.query.email || req.headers['x-user-email'] || '')?.trim()?.toLowerCase();
     const isOwner = req.user?.role === 'OWNER';
     const { q, category, sort } = req.query;
 
@@ -63,7 +67,42 @@ export async function getAllBikes(req, res) {
       else query = query.sort({ createdAt: -1 });
 
       const bikes = await query.lean();
-      return res.status(200).json({ success: true, count: bikes.length, data: bikes });
+
+      // 🛡️ Self-healing: if bike is flagged isBooked: true but booking does not exist in DB:
+      const orphanedBikeIds = [];
+      const sanitizedBikes = bikes.map((bike) => {
+        const hasActiveBooking = Boolean(
+          bike.currentBookingId &&
+          (typeof bike.currentBookingId === 'object' ? bike.currentBookingId._id : bike.currentBookingId)
+        );
+        if (bike.isBooked && !hasActiveBooking) {
+          orphanedBikeIds.push(bike._id);
+          return {
+            ...bike,
+            isBooked: false,
+            currentBookingId: null,
+            currentBookedByUserId: null,
+            currentBookedByEmail: null,
+          };
+        }
+        return bike;
+      });
+
+      if (orphanedBikeIds.length > 0) {
+        BikeModel.updateMany(
+          { _id: { $in: orphanedBikeIds } },
+          {
+            $set: {
+              isBooked: false,
+              currentBookingId: null,
+              currentBookedByUserId: null,
+              currentBookedByEmail: null,
+            },
+          }
+        ).catch((err) => console.warn('[Auto-Reconcile Owner] Error healing orphaned bikes:', err.message));
+      }
+
+      return res.status(200).json({ success: true, count: sanitizedBikes.length, data: sanitizedBikes });
     }
 
     // Find any bookings belonging to this renter (by user ID or email)
@@ -99,6 +138,7 @@ export async function getAllBikes(req, res) {
           { isBooked: false },
           ...(currentUserId ? [{ isBooked: true, currentBookedByUserId: currentUserId }] : []),
           ...(userObjId ? [{ isBooked: true, currentBookedByUserId: userObjId }] : []),
+          ...(currentUserEmail ? [{ isBooked: true, currentBookedByEmail: new RegExp(`^${currentUserEmail.trim()}$`, 'i') }] : []),
           ...(userBookedBikeIds.length > 0 ? [{ _id: { $in: userBookedBikeIds } }] : []),
         ],
       };
@@ -120,8 +160,28 @@ export async function getAllBikes(req, res) {
     const bikes = await query.lean();
     const userBookedIdStrings = userBookedBikeIds.map((id) => String(id));
 
-    // Mark 'isMyBooking' flag so client can render dark card with 'BOOKED' badge
+    // 🛡️ Self-healing & formatting:
+    // If a bike is marked isBooked: true, but its booking was deleted from the 'bookings' collection,
+    // automatically heal it so it is never shown as booked.
+    const orphanedBikeIds = [];
     const formattedBikes = bikes.map((bike) => {
+      const hasActiveBooking = Boolean(
+        bike.currentBookingId &&
+        (typeof bike.currentBookingId === 'object' ? bike.currentBookingId._id : bike.currentBookingId)
+      );
+
+      if (bike.isBooked && !hasActiveBooking) {
+        orphanedBikeIds.push(bike._id);
+        return {
+          ...bike,
+          isBooked: false,
+          currentBookingId: null,
+          currentBookedByUserId: null,
+          currentBookedByEmail: null,
+          isMyBooking: false,
+        };
+      }
+
       const bookedEmail = (
         bike.currentBookedByEmail ||
         bike.currentBookingId?.riderDetails?.email ||
@@ -129,9 +189,11 @@ export async function getAllBikes(req, res) {
       )?.toLowerCase();
 
       const isMy = Boolean(
-        (currentUserId && String(bike.currentBookedByUserId) === String(currentUserId)) ||
-        userBookedIdStrings.includes(String(bike._id)) ||
-        (currentUserEmail && bookedEmail && bookedEmail === currentUserEmail.toLowerCase())
+        hasActiveBooking && (
+          (currentUserId && String(bike.currentBookedByUserId) === String(currentUserId)) ||
+          userBookedIdStrings.includes(String(bike._id)) ||
+          (currentUserEmail && bookedEmail && bookedEmail === currentUserEmail.toLowerCase())
+        )
       );
       return {
         ...bike,
@@ -139,6 +201,20 @@ export async function getAllBikes(req, res) {
         isMyBooking: isMy,
       };
     });
+
+    if (orphanedBikeIds.length > 0) {
+      BikeModel.updateMany(
+        { _id: { $in: orphanedBikeIds } },
+        {
+          $set: {
+            isBooked: false,
+            currentBookingId: null,
+            currentBookedByUserId: null,
+            currentBookedByEmail: null,
+          },
+        }
+      ).catch((err) => console.warn('[Auto-Reconcile] Error healing orphaned bikes:', err.message));
+    }
 
     return res.status(200).json({ success: true, count: formattedBikes.length, data: formattedBikes });
   } catch (error) {
@@ -177,10 +253,50 @@ export async function getBikeById(req, res) {
       return res.status(404).json({ success: false, message: 'Motorcycle not found.' });
     }
 
+    const hasActiveBooking = Boolean(
+      bike.currentBookingId &&
+      (typeof bike.currentBookingId === 'object' ? bike.currentBookingId._id : bike.currentBookingId)
+    );
+
+    if (bike.isBooked && !hasActiveBooking) {
+      bike.isBooked = false;
+      bike.currentBookingId = null;
+      bike.currentBookedByUserId = null;
+      bike.currentBookedByEmail = null;
+      BikeModel.updateOne(
+        { _id: bike._id },
+        {
+          $set: {
+            isBooked: false,
+            currentBookingId: null,
+            currentBookedByUserId: null,
+            currentBookedByEmail: null,
+          },
+        }
+      ).catch(() => {});
+    }
+
     const currentUserId = req.user?._id || req.user?.id;
+
+    // Resolve live Cloudflare R2 signed URLs for bike compliance documents
+    const regNo = bike.registrationNumber || bike._id;
+    const docs = bike.documents || {};
+    const resolvedDocs = {
+      ...docs,
+      rcSmartCardUrl: await resolveDocumentSignedUrl(docs.rcSmartCardUrl, regNo, 'rc') || docs.rcSmartCardUrl,
+      insurancePolicyUrl: await resolveDocumentSignedUrl(docs.insurancePolicyUrl, regNo, 'insurance') || docs.insurancePolicyUrl,
+      pucCertificateUrl: await resolveDocumentSignedUrl(docs.pucCertificateUrl, regNo, 'puc') || docs.pucCertificateUrl,
+      rcDirectUrl: `/api/documents/file/${encodeURIComponent(regNo)}/rc`,
+      insuranceDirectUrl: `/api/documents/file/${encodeURIComponent(regNo)}/insurance`,
+      pucDirectUrl: `/api/documents/file/${encodeURIComponent(regNo)}/puc`,
+    };
+
     const formatted = {
       ...bike,
-      isMyBooking: Boolean(currentUserId && String(bike.currentBookedByUserId) === String(currentUserId)),
+      documents: resolvedDocs,
+      isMyBooking: Boolean(
+        hasActiveBooking && currentUserId && String(bike.currentBookedByUserId) === String(currentUserId)
+      ),
     };
 
     return res.status(200).json({ success: true, data: formatted });
@@ -246,6 +362,26 @@ export async function createBikeListing(req, res) {
       });
     }
 
+    const extractDocKeyOrUrl = async (docObj, docType, reg) => {
+      if (!docObj) {
+        return (await findBikeDocumentKey(reg, docType)) || '';
+      }
+      if (typeof docObj === 'string') {
+        if (docObj.startsWith('documents/') || docObj.startsWith('http')) return docObj;
+        return (await findBikeDocumentKey(reg, docType)) || docObj;
+      }
+      if (docObj.key && docObj.key.startsWith('documents/')) return docObj.key;
+      if (docObj.fileUrl && docObj.fileUrl.startsWith('http')) return docObj.fileUrl;
+      if (docObj.signedUrl) return docObj.signedUrl;
+      const foundInR2 = await findBikeDocumentKey(reg, docType);
+      if (foundInR2) return foundInR2;
+      return docObj.key || docObj.fileUrl || '';
+    };
+
+    const rcSmartCardUrl = await extractDocKeyOrUrl(data.documents?.rc, 'rc', regNo);
+    const insurancePolicyUrl = await extractDocKeyOrUrl(data.documents?.insurance, 'insurance', regNo);
+    const pucCertificateUrl = await extractDocKeyOrUrl(data.documents?.puc, 'puc', regNo);
+
     const newBike = await BikeModel.create({
       listingCode,
       name: data.name || `${data.brand || ''} ${data.model || ''}`.trim(),
@@ -272,10 +408,10 @@ export async function createBikeListing(req, res) {
       photos: bikeImages,
       gallery: galleryList,
       documents: {
-        rcSmartCardUrl: data.documents?.rc?.fileName || '',
-        insurancePolicyUrl: data.documents?.insurance?.fileName || '',
+        rcSmartCardUrl,
+        insurancePolicyUrl,
         insuranceExpiryDate: data.insuranceExpiryDate ? new Date(data.insuranceExpiryDate) : null,
-        pucCertificateUrl: data.documents?.puc?.fileName || '',
+        pucCertificateUrl,
         pucExpiryDate: data.pucExpiryDate ? new Date(data.pucExpiryDate) : null,
       },
       isBooked: false,

@@ -3,7 +3,7 @@ import { BookingModel } from '../models/Booking.js';
 import { BikeModel } from '../models/Bike.js';
 import { PaymentTransactionModel } from '../models/PaymentTransaction.js';
 import { UserModel } from '../models/User.js';
-import { deleteDocumentFromR2 } from '../services/r2Service.js';
+import { deleteDocumentFromR2, resolveDocumentSignedUrl } from '../services/r2Service.js';
 
 /**
  * Calculate quotation for rental (Single-owner direct model: zero platform fee/commission)
@@ -41,15 +41,18 @@ export async function createBooking(req, res) {
   try {
     const data = req.body;
     let userId = req.user?.id || req.user?._id;
+    const cleanRiderEmail = (data.riderEmail || req.user?.email || '').trim().toLowerCase();
+    const cleanRiderName = (data.riderName || req.user?.fullName || 'Rider').trim();
+    const cleanRiderPhone = (data.riderPhone || req.user?.phoneNumber || '').trim();
 
     // If guest or no token, find or create user by riderEmail
-    if (!userId && data.riderEmail) {
-      let user = await UserModel.findOne({ email: data.riderEmail.toLowerCase() });
+    if (!userId && cleanRiderEmail) {
+      let user = await UserModel.findOne({ email: cleanRiderEmail });
       if (!user) {
         user = await UserModel.create({
-          email: data.riderEmail.toLowerCase(),
-          fullName: data.riderName || 'Rider',
-          phoneNumber: data.riderPhone || '',
+          email: cleanRiderEmail,
+          fullName: cleanRiderName,
+          phoneNumber: cleanRiderPhone,
           phoneCountryCode: data.countryCode || '+91',
           role: 'RENTER',
         });
@@ -82,6 +85,7 @@ export async function createBooking(req, res) {
       {
         isBooked: true,
         currentBookedByUserId: userId,
+        currentBookedByEmail: cleanRiderEmail,
       },
       { new: true }
     );
@@ -115,9 +119,9 @@ export async function createBooking(req, res) {
       isDoorstepDelivery: Boolean(data.isDoorstepDelivery),
       deliveryAddress: data.deliveryAddress || '',
       riderDetails: {
-        fullName: data.riderName || req.user?.fullName || 'Rider',
-        email: data.riderEmail || req.user?.email || 'rider@example.com',
-        phoneNumber: data.riderPhone || '',
+        fullName: cleanRiderName,
+        email: cleanRiderEmail,
+        phoneNumber: cleanRiderPhone,
         dateOfBirth: data.riderDob ? new Date(data.riderDob) : undefined,
         documents: data.riderDocuments || undefined,
       },
@@ -135,8 +139,10 @@ export async function createBooking(req, res) {
       transactionId: data.transactionId || `TXN_${Date.now()}`,
     });
 
-    // Update bike with currentBookingId
+    // Update bike with currentBookingId & email
     lockedBike.currentBookingId = newBooking._id;
+    lockedBike.currentBookedByEmail = cleanRiderEmail;
+    lockedBike.currentBookedByUserId = userId;
     await lockedBike.save();
 
     // Log payment transaction
@@ -150,10 +156,16 @@ export async function createBooking(req, res) {
       status: 'SUCCESSFUL',
     }).catch(() => {});
 
+    // Populate bikeId so the frontend immediately receives full motorcycle data
+    const populatedBooking = await BookingModel.findById(newBooking._id)
+      .populate('bikeId')
+      .populate('renterId', 'fullName email phoneNumber drivingLicense')
+      .lean();
+
     return res.status(201).json({
       success: true,
       message: 'Booking reserved and confirmed successfully.',
-      booking: newBooking,
+      booking: populatedBooking || newBooking,
       refId: bookingCode,
     });
   } catch (error) {
@@ -219,6 +231,7 @@ export async function cancelBooking(req, res) {
         isBooked: false,
         currentBookingId: null,
         currentBookedByUserId: null,
+        currentBookedByEmail: null,
       }
     );
 
@@ -280,7 +293,7 @@ export async function updateBookingStatus(req, res) {
     if (status === 'COMPLETED' || status === 'CANCELLED') {
       await BikeModel.findOneAndUpdate(
         { _id: booking.bikeId, currentBookingId: booking._id },
-        { isBooked: false, currentBookingId: null, currentBookedByUserId: null }
+        { isBooked: false, currentBookingId: null, currentBookedByUserId: null, currentBookedByEmail: null }
       );
     }
 
@@ -315,7 +328,7 @@ export async function cleanupExpiredBookings() {
       if (booking.bikeId) {
         await BikeModel.findOneAndUpdate(
           { _id: booking.bikeId, currentBookingId: booking._id },
-          { isBooked: false, currentBookingId: null, currentBookedByUserId: null }
+          { isBooked: false, currentBookingId: null, currentBookedByUserId: null, currentBookedByEmail: null }
         ).catch(() => {});
       }
 
@@ -373,10 +386,45 @@ export async function getOwnerDashboardBookings(req, res) {
       .sort({ returnDatetime: 1 })
       .lean();
 
+    // Resolve live Cloudflare R2 signed URLs for user documents for Owner verification
+    const resolvedBookings = await Promise.all(
+      activeBookings.map(async (b) => {
+        const rawUserDocs = b.riderDocuments || b.riderDetails?.documents || {};
+        const aadhaarDoc = rawUserDocs.aadhaar;
+        const dlDoc = rawUserDocs.drivingLicence;
+        const renterId = b.renterId?._id || b.renterId;
+
+        const resolvedAadhaar = aadhaarDoc ? {
+          ...aadhaarDoc,
+          signedUrl: (await resolveDocumentSignedUrl(aadhaarDoc.signedUrl || aadhaarDoc.key || aadhaarDoc.fileUrl || aadhaarDoc.fileName, renterId, 'aadhaar')) || aadhaarDoc.signedUrl || aadhaarDoc.fileUrl,
+        } : null;
+
+        const resolvedDl = dlDoc ? {
+          ...dlDoc,
+          signedUrl: (await resolveDocumentSignedUrl(dlDoc.signedUrl || dlDoc.key || dlDoc.fileUrl || dlDoc.fileName, renterId, 'driving-licence')) || dlDoc.signedUrl || dlDoc.fileUrl,
+        } : null;
+
+        return {
+          ...b,
+          riderDocuments: {
+            aadhaar: resolvedAadhaar,
+            drivingLicence: resolvedDl,
+          },
+          riderDetails: {
+            ...(b.riderDetails || {}),
+            documents: {
+              aadhaar: resolvedAadhaar,
+              drivingLicence: resolvedDl,
+            },
+          },
+        };
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      count: activeBookings.length,
-      data: activeBookings,
+      count: resolvedBookings.length,
+      data: resolvedBookings,
       serverTime: now.toISOString(),
     });
   } catch (error) {
@@ -397,15 +445,64 @@ export async function getUserBookings(req, res) {
     await cleanupExpiredBookings();
 
     const now = new Date();
-    const currentUserId = req.user?.id || req.user?._id;
-    const currentUserEmail = req.user?.email?.toLowerCase();
+    const currentUserId = req.user?.id || req.user?._id || req.query.userId;
+    const currentUserEmail = (
+      req.user?.email ||
+      req.query.email ||
+      req.headers['x-user-email'] ||
+      ''
+    ).trim().toLowerCase();
 
     const conditions = [];
-    if (currentUserId && mongoose.Types.ObjectId.isValid(currentUserId)) {
+
+    // 1. Match by renterId
+    if (currentUserId) {
       conditions.push({ renterId: currentUserId });
+      if (mongoose.Types.ObjectId.isValid(currentUserId)) {
+        conditions.push({ renterId: new mongoose.Types.ObjectId(currentUserId) });
+      }
     }
+
+    // 2. Match by riderDetails.email (case-insensitive regex)
     if (currentUserEmail) {
-      conditions.push({ 'riderDetails.email': currentUserEmail });
+      const emailRegex = new RegExp(`^${currentUserEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i');
+      conditions.push({ 'riderDetails.email': emailRegex });
+
+      // Find any UserModel IDs associated with this email and match renterId
+      try {
+        const matchingUsers = await UserModel.find({ email: emailRegex }).select('_id').lean();
+        if (matchingUsers && matchingUsers.length > 0) {
+          const userIds = matchingUsers.map((u) => u._id);
+          conditions.push({ renterId: { $in: userIds } });
+        }
+      } catch (err) {}
+
+      // Find any bikes currently marked with this booked email or userId
+      try {
+        const bikeConditions = [{ currentBookedByEmail: emailRegex }];
+        if (currentUserId) {
+          bikeConditions.push({ currentBookedByUserId: currentUserId });
+          if (mongoose.Types.ObjectId.isValid(currentUserId)) {
+            bikeConditions.push({ currentBookedByUserId: new mongoose.Types.ObjectId(currentUserId) });
+          }
+        }
+
+        const bookedBikes = await BikeModel.find({
+          $or: bikeConditions,
+          isBooked: true,
+          currentBookingId: { $ne: null },
+        })
+          .select('currentBookingId')
+          .lean();
+
+        const bikeBookingIds = bookedBikes
+          .map((b) => b.currentBookingId)
+          .filter((id) => id && mongoose.Types.ObjectId.isValid(id));
+
+        if (bikeBookingIds.length > 0) {
+          conditions.push({ _id: { $in: bikeBookingIds } });
+        }
+      } catch (err) {}
     }
 
     if (conditions.length === 0) {
@@ -414,43 +511,61 @@ export async function getUserBookings(req, res) {
 
     const bookings = await BookingModel.find({ $or: conditions })
       .populate('bikeId')
+      .populate('renterId', 'fullName email phoneNumber drivingLicense')
       .sort({ createdAt: -1 })
       .lean();
 
     // Map each booking to enforce Auto-Deletion of bike documents after returnDatetime
-    const processedBookings = bookings.map((booking) => {
-      const returnTime = new Date(booking.returnDatetime).getTime();
-      const hasPassed = isNaN(returnTime) ? false : now.getTime() >= returnTime;
-      const isCompletedOrCancelled = booking.bookingStatus === 'COMPLETED' || booking.bookingStatus === 'CANCELLED';
-      const isExpired = hasPassed || isCompletedOrCancelled;
+    const processedBookings = await Promise.all(
+      bookings.map(async (booking) => {
+        const returnTime = new Date(booking.returnDatetime).getTime();
+        const hasPassed = isNaN(returnTime) ? false : now.getTime() >= returnTime;
+        const isCompletedOrCancelled = booking.bookingStatus === 'COMPLETED' || booking.bookingStatus === 'CANCELLED';
+        const isExpired = hasPassed || isCompletedOrCancelled;
 
-      const bike = booking.bikeId || {};
+        const bike = booking.bikeId || {};
 
-      if (isExpired) {
-        // AUTO-DELETION APPLIED:
-        // Bike continues to show, but official documents (RC, PUC, Insurance) are removed from user's view!
+        if (isExpired) {
+          // AUTO-DELETION APPLIED:
+          // Bike continues to show, but official documents (RC, PUC, Insurance) are removed from user's view!
+          return {
+            ...booking,
+            isExpired: true,
+            documentsDeleted: true,
+            documentsPurgedAt: booking.documentsCleanedUpAt || booking.returnDatetime,
+            bikeDocuments: null, // Removed from user's view!
+            bike: {
+              ...bike,
+              documents: null, // Sanitized
+            },
+          };
+        }
+
+        // Active rental: User can view the bike's official compliance documents (RC, PUC, Insurance)
+        const rawDocs = bike.documents || {};
+        const reg = bike.registrationNumber || bike._id;
+        const resolvedDocs = {
+          ...rawDocs,
+          rcSmartCardUrl: (await resolveDocumentSignedUrl(rawDocs.rcSmartCardUrl, reg, 'rc')) || rawDocs.rcSmartCardUrl,
+          insurancePolicyUrl: (await resolveDocumentSignedUrl(rawDocs.insurancePolicyUrl, reg, 'insurance')) || rawDocs.insurancePolicyUrl,
+          pucCertificateUrl: (await resolveDocumentSignedUrl(rawDocs.pucCertificateUrl, reg, 'puc')) || rawDocs.pucCertificateUrl,
+          rcDirectUrl: `/api/documents/file/${encodeURIComponent(reg)}/rc`,
+          insuranceDirectUrl: `/api/documents/file/${encodeURIComponent(reg)}/insurance`,
+          pucDirectUrl: `/api/documents/file/${encodeURIComponent(reg)}/puc`,
+        };
+
         return {
           ...booking,
-          isExpired: true,
-          documentsDeleted: true,
-          documentsPurgedAt: booking.documentsCleanedUpAt || booking.returnDatetime,
-          bikeDocuments: null, // Removed from user's view!
+          isExpired: false,
+          documentsDeleted: false,
+          bikeDocuments: resolvedDocs,
           bike: {
             ...bike,
-            documents: null, // Sanitized
+            documents: resolvedDocs,
           },
         };
-      }
-
-      // Active rental: User can view the bike's official compliance documents (RC, PUC, Insurance)
-      return {
-        ...booking,
-        isExpired: false,
-        documentsDeleted: false,
-        bikeDocuments: bike.documents || null,
-        bike,
-      };
-    });
+      })
+    );
 
     return res.status(200).json({
       success: true,
@@ -489,7 +604,7 @@ export async function markBookingReturned(req, res) {
     // Release vehicle
     await BikeModel.findOneAndUpdate(
       { _id: booking.bikeId, currentBookingId: booking._id },
-      { isBooked: false, currentBookingId: null, currentBookedByUserId: null }
+      { isBooked: false, currentBookingId: null, currentBookedByUserId: null, currentBookedByEmail: null }
     );
 
     // Delete user submitted documents from R2 storage

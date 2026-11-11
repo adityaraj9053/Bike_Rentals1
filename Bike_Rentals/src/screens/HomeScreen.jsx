@@ -75,7 +75,13 @@ export default function HomeScreen({
   const visibleFleet = useMemo(() => {
     return activeFleet.filter((bike) => {
       if (isOwner) return true;
-      if (!bike.isBooked) return true;
+      const hasActiveBooking = Boolean(
+        bike.currentBookingId &&
+        (typeof bike.currentBookingId === 'object'
+          ? Boolean(bike.currentBookingId._id || Object.keys(bike.currentBookingId).length > 0)
+          : Boolean(bike.currentBookingId))
+      );
+      if (!bike.isBooked || !hasActiveBooking) return true;
       const bookedUserId = bike.currentBookedByUserId?._id || bike.currentBookedByUserId;
       const bookedUserEmail = (
         bike.currentBookedByEmail ||
@@ -86,7 +92,8 @@ export default function HomeScreen({
 
       const isMyBike = Boolean(
         (currentUserId && bookedUserId && String(bookedUserId) === String(currentUserId)) ||
-        (userEmail && bookedUserEmail && userEmail === bookedUserEmail)
+        (userEmail && bookedUserEmail && userEmail === bookedUserEmail) ||
+        bike.isMyBooking
       );
       return Boolean(isMyBike);
     });

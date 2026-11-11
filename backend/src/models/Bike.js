@@ -86,6 +86,13 @@ const BikeSchema = new Schema({
     default: null,
     index: true,
   },
+  currentBookedByEmail: {
+    type: String,
+    default: null,
+    trim: true,
+    lowercase: true,
+    index: true,
+  },
 
   pickupAddress: { type: String, required: true },
   pickupTimings: { type: String, default: '07:00 AM - 09:00 PM' },

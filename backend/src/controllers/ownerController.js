@@ -6,6 +6,10 @@ import {
   deleteMultipleImagesFromCloudinary,
   extractPublicId,
 } from '../services/cloudinaryService.js';
+import {
+  findBikeDocumentKey,
+  resolveDocumentSignedUrl,
+} from '../services/r2Service.js';
 
 /**
  * Get stored Business / Owner Settings (stored once)
@@ -140,6 +144,26 @@ export async function createOwnerBike(req, res) {
       });
     }
 
+    const extractDocKeyOrUrl = async (docObj, docType, reg) => {
+      if (!docObj) {
+        return (await findBikeDocumentKey(reg, docType)) || '';
+      }
+      if (typeof docObj === 'string') {
+        if (docObj.startsWith('documents/') || docObj.startsWith('http')) return docObj;
+        return (await findBikeDocumentKey(reg, docType)) || docObj;
+      }
+      if (docObj.key && docObj.key.startsWith('documents/')) return docObj.key;
+      if (docObj.fileUrl && docObj.fileUrl.startsWith('http')) return docObj.fileUrl;
+      if (docObj.signedUrl) return docObj.signedUrl;
+      const foundInR2 = await findBikeDocumentKey(reg, docType);
+      if (foundInR2) return foundInR2;
+      return docObj.key || docObj.fileUrl || '';
+    };
+
+    const rcSmartCardUrl = await extractDocKeyOrUrl(data.documents?.rc, 'rc', regNo);
+    const insurancePolicyUrl = await extractDocKeyOrUrl(data.documents?.insurance, 'insurance', regNo);
+    const pucCertificateUrl = await extractDocKeyOrUrl(data.documents?.puc, 'puc', regNo);
+
     const newBike = await BikeModel.create({
       listingCode,
       name: data.name || `${data.brand || ''} ${data.model || ''}`.trim(),
@@ -167,10 +191,10 @@ export async function createOwnerBike(req, res) {
       photos: bikeImages,
       gallery: galleryList,
       documents: {
-        rcSmartCardUrl: data.documents?.rc?.fileName || data.documents?.rcSmartCardUrl || '',
-        insurancePolicyUrl: data.documents?.insurance?.fileName || data.documents?.insurancePolicyUrl || '',
+        rcSmartCardUrl,
+        insurancePolicyUrl,
         insuranceExpiryDate: data.insuranceExpiryDate ? new Date(data.insuranceExpiryDate) : null,
-        pucCertificateUrl: data.documents?.puc?.fileName || data.documents?.pucCertificateUrl || '',
+        pucCertificateUrl,
         pucExpiryDate: data.pucExpiryDate ? new Date(data.pucExpiryDate) : null,
       },
       isBooked: false,

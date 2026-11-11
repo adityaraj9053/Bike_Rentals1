@@ -172,9 +172,11 @@ export async function verifyPayment(req, res) {
 
         // Ensure bike is marked booked
         if (updatedBooking.bikeId) {
+          const bookedEmail = (updatedBooking.riderDetails?.email || '').trim().toLowerCase();
           await BikeModel.findByIdAndUpdate(updatedBooking.bikeId, {
             isBooked: true,
             currentBookedByUserId: updatedBooking.renterId,
+            currentBookedByEmail: bookedEmail || null,
             currentBookingId: updatedBooking._id,
           });
         }
@@ -234,6 +236,7 @@ export async function verifyPayment(req, res) {
         if (bike) {
           bike.isBooked = true;
           bike.currentBookedByUserId = userId;
+          bike.currentBookedByEmail = (bookingData.riderEmail || req.user?.email || '').trim().toLowerCase();
           bike.currentBookingId = updatedBooking._id;
           await bike.save();
         }

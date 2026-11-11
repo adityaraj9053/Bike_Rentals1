@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   Image,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { X, ExternalLink, ShieldCheck, FileText, Download } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../theme/colors';
+import { documentsAPI, API_BASE_URL } from '../services/api';
 
 export default function DocumentPreviewModal({
   visible,
@@ -20,15 +22,86 @@ export default function DocumentPreviewModal({
   fileName,
   docType,
 }) {
+  const [resolvedUrl, setResolvedUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !documentUrl) {
+      setResolvedUrl(null);
+      return;
+    }
+
+    const resolveUrl = async () => {
+      // 1. If already full absolute URL or blob preview, use directly
+      if (
+        documentUrl.startsWith('https://') ||
+        documentUrl.startsWith('http://') ||
+        documentUrl.startsWith('blob:')
+      ) {
+        setResolvedUrl(documentUrl);
+        return;
+      }
+
+      // 2. If it's an R2 key or filename, resolve via API
+      setLoading(true);
+      try {
+        const res = await documentsAPI.getSignedUrl(documentUrl);
+        if (res && res.data && res.data.signedUrl) {
+          setResolvedUrl(res.data.signedUrl);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('[DocPreview] Signed URL resolution fallback:', err.message);
+      }
+
+      // 3. Fallback to direct backend streaming/redirect endpoint
+      const directUrl = documentsAPI.getDirectViewUrl(documentUrl);
+      setResolvedUrl(directUrl);
+      setLoading(false);
+    };
+
+    resolveUrl();
+  }, [visible, documentUrl]);
+
   if (!visible) return null;
 
   const isPdf =
     (fileName && fileName.toLowerCase().endsWith('.pdf')) ||
-    (typeof documentUrl === 'string' && documentUrl.toLowerCase().includes('.pdf'));
+    (typeof (resolvedUrl || documentUrl) === 'string' &&
+      (resolvedUrl || documentUrl).toLowerCase().includes('.pdf'));
 
-  const handleOpenExternal = () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+  const handleOpenExternal = async () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      let target = resolvedUrl;
+      const docIdentifier = documentUrl || fileName;
+      if (!target && docIdentifier) {
+        if (
+          docIdentifier.startsWith('https://') ||
+          docIdentifier.startsWith('http://') ||
+          docIdentifier.startsWith('blob:')
+        ) {
+          target = docIdentifier;
+        } else {
+          try {
+            const res = await documentsAPI.getSignedUrl(docIdentifier);
+            if (res && res.data && res.data.signedUrl) {
+              target = res.data.signedUrl;
+            }
+          } catch (e) {}
+          if (!target) {
+            target = documentsAPI.getDirectViewUrl(docIdentifier);
+          }
+        }
+      }
+
+      if (target) {
+        // Guarantee target is never a relative localhost:8081 path
+        if (!target.startsWith('http://') && !target.startsWith('https://') && !target.startsWith('blob:')) {
+          target = documentsAPI.getDirectViewUrl(target);
+        }
+        window.open(target, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -84,14 +157,19 @@ export default function DocumentPreviewModal({
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            {isPdf ? (
+            {loading ? (
+              <View style={styles.emptyCard}>
+                <ActivityIndicator size="large" color={COLORS.accentCyan} />
+                <Text style={[styles.emptyText, { marginTop: 12 }]}>Fetching secure document from Cloudflare R2...</Text>
+              </View>
+            ) : isPdf ? (
               <View style={styles.pdfCard}>
                 <FileText size={48} color={COLORS.accentCyan} />
                 <Text style={styles.pdfTitle}>{fileName || 'PDF Document'}</Text>
                 <Text style={styles.pdfNotice}>
                   Protected PDF document view.
                 </Text>
-                {documentUrl ? (
+                {resolvedUrl || documentUrl ? (
                   <TouchableOpacity
                     style={styles.openExternalBtn}
                     onPress={handleOpenExternal}
@@ -104,10 +182,10 @@ export default function DocumentPreviewModal({
                   </TouchableOpacity>
                 ) : null}
               </View>
-            ) : documentUrl ? (
+            ) : resolvedUrl || documentUrl ? (
               <View style={styles.imageWrapper}>
                 <Image
-                  source={{ uri: documentUrl }}
+                  source={{ uri: resolvedUrl || documentUrl }}
                   style={styles.previewImage}
                   resizeMode="contain"
                 />

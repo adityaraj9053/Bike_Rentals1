@@ -128,12 +128,15 @@ export default function OwnerDashboardView({
       if (onShowToast) onShowToast('No document attached.');
       return;
     }
-    const docUrl = typeof docObj === 'string' ? docObj : (docObj.signedUrl || docObj.url || docObj.fileUrl);
-    const fileName = docObj.fileName || docObj.name || fallbackName;
+    const docUrl =
+      typeof docObj === 'string'
+        ? docObj
+        : (docObj.signedUrl || docObj.fileUrl || docObj.url || docObj.key || docObj.fileName);
+    const fileName = docObj.fileName || docObj.name || (typeof docObj === 'string' ? docObj : fallbackName);
 
     setSelectedDoc({
       title,
-      url: docUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800',
+      url: docUrl || fileName,
       fileName,
     });
     setIsDocModalVisible(true);

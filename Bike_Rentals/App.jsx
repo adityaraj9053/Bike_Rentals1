@@ -1,5 +1,5 @@
 import React, { useState, useRef, Component, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +16,7 @@ import AuthModal from './src/components/AuthModal';
 import QuoteModal from './src/components/QuoteModal';
 import FloatingWhatsApp from './src/components/FloatingWhatsApp';
 import Toast from './src/components/Toast';
+import DirectDocumentScreen from './src/screens/DirectDocumentScreen';
 
 import { BIKES_DATA } from './src/data/bikes';
 import { INITIAL_BIKE_LISTINGS } from './src/data/marketplaceData';
@@ -92,6 +93,31 @@ const errorStyles = StyleSheet.create({
 export default function App() {
   const navigationRef = useRef(null);
 
+  // Direct Document Viewer Interception (for paths like http://localhost:8081/Screenshot%202026-11-11%20120511.png)
+  const [documentPath, setDocumentPath] = useState(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+      let p = '';
+      try {
+        p = decodeURIComponent(window.location.pathname || '').replace(/^\/+/, '');
+      } catch (e) {
+        p = (window.location.pathname || '').replace(/^\/+/, '');
+      }
+      if (
+        p &&
+        (/\.(png|jpe?g|pdf|webp)$/i.test(p) ||
+          p.startsWith('documents/') ||
+          p.startsWith('api/documents/') ||
+          p.includes('Screenshot') ||
+          p.includes('Aadhaar') ||
+          p.includes('Licence') ||
+          p.includes('SmartCard'))
+      ) {
+        return p;
+      }
+    }
+    return null;
+  });
+
   // User State
   const [user, setUser] = useState(null);
   const [pendingBookingBike, setPendingBookingBike] = useState(null);
@@ -143,10 +169,35 @@ export default function App() {
     )?.toLowerCase();
     const userEmail = user?.email?.toLowerCase();
 
-    // isMyBooking is strictly true ONLY if the current logged-in user matches the booking!
+    const hasActiveBooking = Boolean(
+      b.currentBookingId &&
+      (typeof b.currentBookingId === 'object'
+        ? Boolean(b.currentBookingId._id || Object.keys(b.currentBookingId).length > 0)
+        : Boolean(b.currentBookingId))
+    );
+
+    const isBooked = Boolean(b.isBooked && hasActiveBooking);
+
+    let userHasLocalBooking = false;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = JSON.parse(window.localStorage.getItem('my_user_bookings') || '[]');
+        userHasLocalBooking = cached.some((cb) => {
+          const cbBikeId = cb.bikeId?._id || cb.bikeId?.id || cb.bike?._id || cb.bike?.id || cb.bikeListingCode;
+          const currentBikeId = b._id || b.id || b.listingCode;
+          return cbBikeId && currentBikeId && String(cbBikeId) === String(currentBikeId);
+        });
+      } catch (e) {}
+    }
+
+    // isMyBooking is strictly true ONLY if bike has active booking matching current user!
     const isMyBooking = Boolean(
-      (currentUserIdStr && bookedUserIdStr && String(bookedUserIdStr) === String(currentUserIdStr)) ||
-      (userEmail && bookedEmail && userEmail === bookedEmail)
+      isBooked && (
+        (currentUserIdStr && bookedUserIdStr && String(bookedUserIdStr) === String(currentUserIdStr)) ||
+        (userEmail && bookedEmail && userEmail === bookedEmail) ||
+        b.isMyBooking ||
+        userHasLocalBooking
+      )
     );
 
     const frontImg = b.images?.front || b.photos?.front || b.images?.thumbnail || b.photos?.thumbnail;
@@ -191,9 +242,9 @@ export default function App() {
       reviewsCount: b.reviewsCount || 124,
       badge: b.status === 'APPROVED' ? 'VERIFIED' : 'FLEET',
       badgeType: 'premium',
-      availability: b.isBooked ? 'Currently Booked' : 'Available for immediate booking',
-      statusBadge: b.isBooked ? 'BOOKED' : 'AVAILABLE',
-      isBooked: Boolean(b.isBooked),
+      availability: isBooked ? 'Currently Booked' : 'Available for immediate booking',
+      statusBadge: isBooked ? 'BOOKED' : 'AVAILABLE',
+      isBooked: isBooked,
       currentBookingId: b.currentBookingId,
       currentBookedByUserId: b.currentBookedByUserId,
       currentBookedByEmail: bookedEmail,
@@ -293,8 +344,8 @@ export default function App() {
 
   const handleBookingConfirmed = (bookingData, targetBike) => {
     const bikeId = targetBike?._id || targetBike?.id || targetBike?.listingCode;
-    const bookedUserId = user?.id || user?._id;
-    const bookedEmail = user?.email || bookingData?.riderDetails?.email;
+    const bookedUserId = user?.id || user?._id || bookingData?.renterId?._id || bookingData?.renterId;
+    const bookedEmail = (bookingData?.riderDetails?.email || user?.email || '').trim().toLowerCase();
 
     setSharedBikes((prev) =>
       prev.map((b) => {
@@ -311,6 +362,7 @@ export default function App() {
             currentBookedByEmail: bookedEmail,
             currentBookingId: bookingData,
             statusBadge: 'BOOKED',
+            isMyBooking: true,
           };
         }
         return b;
@@ -440,6 +492,25 @@ export default function App() {
     });
     setIsQuoteOpen(true);
   };
+
+  if (documentPath) {
+    return (
+      <ErrorBoundary>
+        <SafeAreaProvider style={styles.root}>
+          <StatusBar style="light" backgroundColor={COLORS.bgDark} />
+          <DirectDocumentScreen
+            documentKey={documentPath}
+            onGoHome={() => {
+              if (typeof window !== 'undefined' && window.history) {
+                window.history.pushState({}, '', '/');
+              }
+              setDocumentPath(null);
+            }}
+          />
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>

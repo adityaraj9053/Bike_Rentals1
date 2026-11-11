@@ -80,8 +80,15 @@ export default function MotorbikesScreen({
 
   const filteredBikes = useMemo(() => {
     let result = activeFleet.filter((b) => {
+      const hasActiveBooking = Boolean(
+        b.currentBookingId &&
+        (typeof b.currentBookingId === 'object'
+          ? Boolean(b.currentBookingId._id || Object.keys(b.currentBookingId).length > 0)
+          : Boolean(b.currentBookingId))
+      );
+
       // Visibility rule:
-      if (!isOwner && b.isBooked) {
+      if (!isOwner && b.isBooked && hasActiveBooking) {
         const bookedUserId = b.currentBookedByUserId?._id || b.currentBookedByUserId;
         const bookedUserEmail = (
           b.currentBookedByEmail ||
@@ -92,7 +99,8 @@ export default function MotorbikesScreen({
 
         const isMyBike = Boolean(
           (currentUserId && bookedUserId && String(bookedUserId) === String(currentUserId)) ||
-          (userEmail && bookedUserEmail && userEmail === bookedUserEmail)
+          (userEmail && bookedUserEmail && userEmail === bookedUserEmail) ||
+          b.isMyBooking
         );
 
         if (!isMyBike) return false;

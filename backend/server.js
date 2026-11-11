@@ -18,6 +18,7 @@ import seedRoutes from './src/routes/seedRoutes.js';
 import uploadRoutes from './src/routes/uploadRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js';
 import documentRoutes from './src/routes/documentRoutes.js';
+import { openDocumentHandler } from './src/controllers/documentController.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -102,6 +103,22 @@ app.use('/api/v1/payment', paymentRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/documents', documentRoutes);
+
+// Direct top-level access for Cloudflare R2 documents:
+// Handles direct URLs like:
+// - http://localhost:5000/documents/bikes/EREFDFE4545/rc/Screenshot_...png
+// - http://localhost:5000/Screenshot%202026-11-11%20120511.png
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const rawPath = req.path || '';
+  if (
+    rawPath.startsWith('/documents/') ||
+    /\.(png|jpe?g|pdf|webp)$/i.test(rawPath)
+  ) {
+    return openDocumentHandler(req, res, next);
+  }
+  next();
+});
 
 // 404 handler
 app.use((req, res) => {

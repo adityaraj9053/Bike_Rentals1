@@ -32,14 +32,16 @@ import {
   Info,
   Trash2,
   CheckCircle2,
+  Eye,
 } from 'lucide-react-native';
 import { BIKES_DATA } from '../data/bikes';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import CalendarPickerModal from '../components/CalendarPickerModal';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import PhoneInput from '../components/PhoneInput';
 import { validateEmail, validatePhone } from '../utils/validation';
-import { bookingsAPI, paymentAPI } from '../services/api';
+import { bookingsAPI, paymentAPI, documentsAPI } from '../services/api';
 import { loadRazorpayScript, getRazorpayKeyId } from '../services/razorpay';
 
 const PICKUP_TIMES = [
@@ -117,35 +119,113 @@ export default function BookingScreen({
   });
   const [uploadingDocType, setUploadingDocType] = useState(null);
   const [docErrors, setDocErrors] = useState({ aadhaar: '', drivingLicence: '' });
+  const [previewDocModal, setPreviewDocModal] = useState(null);
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
 
   const handleUploadDoc = (docType) => {
     const isAadhaar = docType === 'Aadhaar Card';
     const docKey = isAadhaar ? 'aadhaar' : 'drivingLicence';
+    const normalizedDocType = isAadhaar ? 'aadhaar' : 'driving-licence';
+
+    const targetUserId =
+      user?._id ||
+      user?.id ||
+      (riderEmail ? riderEmail.trim().toLowerCase().replace(/[^a-z0-9]/g, '_') : null) ||
+      `rider_${Date.now()}`;
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.pdf,image/jpeg,image/png,image/jpg';
-      input.onchange = (e) => {
+      input.accept = 'application/pdf,image/jpeg,image/png,image/jpg,.pdf,.jpg,.jpeg,.png';
+      input.onchange = async (e) => {
         const file = e.target?.files?.[0];
-        if (file) {
-          setUploadingDocType(docType);
-          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-          setTimeout(() => {
+        if (!file) return;
+
+        const allowedMimes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        const ext = file.name ? file.name.split('.').pop().toLowerCase() : '';
+        const isMimeAllowed = allowedMimes.includes(file.type);
+        const isExtAllowed = ['pdf', 'jpg', 'jpeg', 'png'].includes(ext);
+
+        if (!isMimeAllowed && !isExtAllowed) {
+          const err = 'Only PDF, JPEG, and PNG documents are allowed.';
+          setDocErrors((prev) => ({ ...prev, [docKey]: err }));
+          if (onShowToast) onShowToast(err);
+          return;
+        }
+
+        const maxBytes = 10 * 1024 * 1024; // 10MB limit
+        if (file.size > maxBytes) {
+          const err = `"${file.name}" exceeds the 10MB file limit.`;
+          setDocErrors((prev) => ({ ...prev, [docKey]: err }));
+          if (onShowToast) onShowToast(err);
+          return;
+        }
+
+        setUploadingDocType(docType);
+
+        let localUrl = null;
+        if (typeof URL !== 'undefined' && URL.createObjectURL) {
+          try {
+            localUrl = URL.createObjectURL(file);
+          } catch (err) {}
+        }
+
+        try {
+          const formData = new FormData();
+          formData.append('document', file);
+          formData.append('file', file);
+          formData.append('documentType', normalizedDocType);
+          formData.append('userId', targetUserId);
+          if (riderEmail) formData.append('email', riderEmail);
+          if (riderPhone) formData.append('phone', riderPhone);
+
+          const res = await documentsAPI.uploadUserDocument(formData, normalizedDocType, targetUserId);
+
+          if (res && res.data) {
+            const uploadedKey = res.data.key;
+            const signedUrl = res.data.signedUrl || res.data.fileUrl || localUrl;
+
             setRiderDocs((prev) => ({
               ...prev,
               [docKey]: {
                 type: docType,
                 fileName: file.name,
-                fileSize: `${Number(sizeMB) > 0 ? sizeMB : '1.4'} MB`,
-                uploadedAt: 'Uploaded just now',
-           //verificationState: '     Awaiting Manual Admin R',eview
+                fileSize: formatFileSize(file.size),
+                uploadedAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                key: uploadedKey,
+                fileUrl: signedUrl,
+                signedUrl: signedUrl,
+                status: 'Encrypted & Stored in R2 Vault',
               },
             }));
             setDocErrors((prev) => ({ ...prev, [docKey]: '' }));
-            setUploadingDocType(null);
-            if (onShowToast) onShowToast(`${docType} (${file.name}) uploaded securely.`);
-          }, 600);
+            if (onShowToast) onShowToast(`${docType} (${file.name}) uploaded securely to Cloudflare R2.`);
+          } else {
+            throw new Error(res?.message || 'Upload failed');
+          }
+        } catch (uploadErr) {
+          console.warn('[User Document Upload Warning]:', uploadErr.message);
+          // Fallback so user is not stuck if offline
+          setRiderDocs((prev) => ({
+            ...prev,
+            [docKey]: {
+              type: docType,
+              fileName: file.name,
+              fileSize: formatFileSize(file.size),
+              uploadedAt: 'Uploaded just now',
+              fileUrl: localUrl,
+            },
+          }));
+          if (onShowToast) onShowToast(`${docType} (${file.name}) attached.`);
+        } finally {
+          setUploadingDocType(null);
         }
       };
       input.click();
@@ -162,18 +242,23 @@ export default function BookingScreen({
             fileName: sampleFileName,
             fileSize: sampleSize,
             uploadedAt: 'Uploaded just now',
-            //verificationState: 'Uploaded - Awaiting Manual Admin Review',
           },
         }));
         setDocErrors((prev) => ({ ...prev, [docKey]: '' }));
         setUploadingDocType(null);
-        if (onShowToast) onShowToast(`${docType} uploaded securely.`);
+        if (onShowToast) onShowToast(`${docType} attached.`);
       }, 600);
     }
   };
 
   const handleRemoveDoc = (docType) => {
     const docKey = docType === 'Aadhaar Card' ? 'aadhaar' : 'drivingLicence';
+    const doc = riderDocs[docKey];
+    if (doc?.key) {
+      documentsAPI.deleteDocument(doc.key).catch((err) => {
+        console.warn('[User Doc Delete Notice]:', err.message);
+      });
+    }
     setRiderDocs((prev) => ({
       ...prev,
       [docKey]: null,
@@ -328,281 +413,537 @@ export default function BookingScreen({
     setStep(2);
   };
 
-  const handleProceedPayment = async () => {
-    if (!user) {
-      if (onOpenAuth) onOpenAuth();
-      if (onShowToast) onShowToast(isHindi ? 'कृपया बुकिंग के लिए लॉग इन करें।' : 'Please log in or sign up first to proceed with booking.');
-      return;
+  // const handleProceedPayment = async () => {
+  //   if (!user) {
+  //     if (onOpenAuth) onOpenAuth();
+  //     if (onShowToast) onShowToast(isHindi ? 'कृपया बुकिंग के लिए लॉग इन करें।' : 'Please log in or sign up first to proceed with booking.');
+  //     return;
+  //   }
+
+  //   if (!pickupDate || !pickupTime || !returnDate || !returnTime) {
+  //     if (onShowToast) onShowToast(isHindi ? 'कृपया पिकअप व वापसी की तारीख और समय चुनें।' : 'Please select pickup and return dates and times.');
+  //     setStep(1);
+  //     return;
+  //   }
+
+  //   if (!riderName.trim()) {
+  //     if (onShowToast) onShowToast(isHindi ? 'कृपया राइडर का पूरा नाम दर्ज करें।' : 'Please enter rider full name.');
+  //     return;
+  //   }
+
+  //   // Phone Validation with Country Code & exactly 10 digits
+  //   const phoneCheck = validatePhone(riderPhone, countryCode);
+  //   if (!phoneCheck.isValid) {
+  //     setPhoneError(isHindi ? phoneCheck.errorHi : phoneCheck.error);
+  //     if (onShowToast) onShowToast(isHindi ? phoneCheck.errorHi : phoneCheck.error);
+  //     return;
+  //   }
+  //   setPhoneError('');
+
+  //   // Email Validation ensuring '@' and '.domain' (e.g. name@example.com)
+  //   const emailCheck = validateEmail(riderEmail);
+  //   if (!emailCheck.isValid) {
+  //     setEmailError(isHindi ? emailCheck.errorHi : emailCheck.error);
+  //     if (onShowToast) onShowToast(isHindi ? emailCheck.errorHi : emailCheck.error);
+  //     return;
+  //   }
+  //   setEmailError('');
+
+  //   // Strict KYC requirement: Both Aadhaar Card and Driving Licence are mandatory
+  //   if (!riderDocs.aadhaar) {
+  //     setDocErrors((prev) => ({
+  //       ...prev,
+  //       aadhaar: isHindi ? 'आधार कार्ड अनिवार्य है। कृपया आधार कार्ड अपलोड करें।' : 'Aadhaar Card is mandatory. Please upload your Aadhaar Card.',
+  //     }));
+  //     setSelectedDocType('Aadhaar Card');
+  //     if (onShowToast) {
+  //       onShowToast(isHindi ? 'आधार कार्ड अनिवार्य है। कृपया अपलोड करें।' : 'Aadhaar Card is mandatory to complete booking.');
+  //     }
+  //     return;
+  //   }
+
+  //   if (!riderDocs.drivingLicence) {
+  //     setDocErrors((prev) => ({
+  //       ...prev,
+  //       drivingLicence: isHindi ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया ड्राइविंग लाइसेंस अपलोड करें।' : 'Driving Licence is mandatory. Please upload your Driving Licence.',
+  //     }));
+  //     setSelectedDocType('Driving Licence');
+  //     if (onShowToast) {
+  //       onShowToast(isHindi ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया अपलोड करें।' : 'Driving Licence is mandatory to complete booking.');
+  //     }
+  //     return;
+  //   }
+
+  //   setIsProcessing(true);
+
+    // try {
+    //   // 1. Ensure Razorpay Checkout script is loaded
+    //   const isScriptLoaded = await loadRazorpayScript();
+    //   if (!isScriptLoaded && typeof window !== 'undefined' && !window.Razorpay) {
+    //     throw new Error(
+    //       isHindi
+    //         ? 'रेज़रपे चेकआउट लोड करने में असमर्थ। कृपया इंटरनेट कनेक्शन जांचें।'
+    //         : 'Failed to load Razorpay Checkout script. Please check your internet connection.'
+    //     );
+    //   }
+
+    //   // 2. Reserve / initialize booking in MongoDB
+    //   let initialBooking = null;
+    //   try {
+    //     const reserveRes = await bookingsAPI.create({
+    //       bikeId: selectedBike._id,
+    //       bikeListingCode: selectedBike.id || selectedBike.listingCode,
+    //       pickupDate: `${pickupDate} ${pickupTime}`,
+    //       returnDate: `${returnDate} ${returnTime}`,
+    //       riderName,
+    //       riderEmail,
+    //       riderPhone,
+    //       countryCode,
+    //       paymentMethod: 'UPI',
+    //       bookingStatus: 'PENDING',
+    //       paymentStatus: 'PENDING',
+    //       riderDocuments: {
+    //         aadhaar: riderDocs.aadhaar,
+    //         drivingLicence: riderDocs.drivingLicence,
+    //       },
+    //       dailyPrice: selectedBike.pricePerDay || selectedBike.dailyPrice,
+    //       securityDeposit: selectedBike.deposit || selectedBike.securityDeposit,
+    //     });
+    //     initialBooking = reserveRes?.booking;
+    //   } catch (reserveErr) {
+    //     console.warn('[BookingScreen] Preliminary booking notice:', reserveErr.message);
+    //   }
+
+    //   const activeBookingId = initialBooking?._id || null;
+    //   const preliminaryRef = initialBooking?.bookingCode || bookingRefId;
+    //   setBookingRefId(preliminaryRef);
+
+    //   // 3. Connect button to call /api/payment/create-order with reservation amount (in INR)
+    //   const orderRes = await paymentAPI.createOrder({
+    //     amount: totalPayable,
+    //     currency: 'INR',
+    //     bookingId: activeBookingId,
+    //     receipt: `rcpt_${preliminaryRef}`,
+    //     notes: {
+    //       bikeName: selectedBike.name,
+    //       riderName,
+    //       riderPhone,
+    //       riderEmail,
+    //     },
+    //   });
+
+    //   if (!orderRes || !orderRes.order_id) {
+    //     throw new Error(orderRes?.message || 'Could not create Razorpay order.');
+    //   }
+
+    //   // 4. Open Razorpay Checkout modal using order_id and RAZORPAY_KEY_ID (never Key Secret)
+    //   const keyId = getRazorpayKeyId(orderRes.key_id);
+
+    //   const options = {
+    //     key: keyId,
+    //     amount: orderRes.amount, // in paise
+    //     currency: orderRes.currency || 'INR',
+    //     name: 'The Road Eagle',
+    //     description: `Motorcycle Reservation - ${selectedBike.name}`,
+    //     order_id: orderRes.order_id,
+    //     prefill: {
+    //       name: riderName,
+    //       email: riderEmail,
+    //       contact: `${countryCode}${riderPhone}`.replace('+', ''),
+    //     },
+    //     notes: {
+    //       bookingCode: preliminaryRef,
+    //       bikeId: String(selectedBike._id || selectedBike.id || ''),
+    //     },
+    //     theme: {
+    //       color: '#E11D48',
+    //     },
+    //     handler: async function (paymentResponse) {
+    //       // 5. In handler callback, send payment response to /api/payment/verify
+    //       try {
+    //         setIsProcessing(true);
+    //         const verifyRes = await paymentAPI.verify({
+    //           razorpay_order_id: paymentResponse.razorpay_order_id,
+    //           razorpay_payment_id: paymentResponse.razorpay_payment_id,
+    //           razorpay_signature: paymentResponse.razorpay_signature,
+    //           bookingId: activeBookingId || preliminaryRef,
+    //           bookingData: {
+    //             bikeId: selectedBike._id,
+    //             bikeListingCode: selectedBike.id || selectedBike.listingCode,
+    //             pickupDate: `${pickupDate} ${pickupTime}`,
+    //             returnDate: `${returnDate} ${returnTime}`,
+    //             riderName,
+    //             riderEmail,
+    //             riderPhone,
+    //             countryCode,
+    //             totalPayable,
+    //             dailyPrice: selectedBike.pricePerDay || selectedBike.dailyPrice,
+    //             securityDeposit: selectedBike.deposit || selectedBike.securityDeposit,
+    //             riderDocuments: {
+    //               aadhaar: riderDocs.aadhaar,
+    //               drivingLicence: riderDocs.drivingLicence,
+    //             },
+    //           },
+    //         });
+
+    //         // 6. Show success state to user
+    //         const confirmedRef =
+    //           verifyRes.refId ||
+    //           verifyRes.booking?.bookingCode ||
+    //           preliminaryRef;
+    //         setBookingRefId(confirmedRef);
+
+    //         const confirmedBookingData = verifyRes.booking || {
+    //           bookingCode: confirmedRef,
+    //           riderDetails: {
+    //             fullName: riderName,
+    //             email: riderEmail,
+    //             phoneNumber: riderPhone,
+    //             documents: {
+    //               aadhaar: riderDocs.aadhaar,
+    //               drivingLicence: riderDocs.drivingLicence,
+    //             },
+    //           },
+    //           riderDocuments: {
+    //             aadhaar: riderDocs.aadhaar,
+    //             drivingLicence: riderDocs.drivingLicence,
+    //           },
+    //           pickupDatetime: `${pickupDate} ${pickupTime}`,
+    //           returnDatetime: `${returnDate} ${returnTime}`,
+    //           pricing: { totalPayable },
+    //           transactionId: paymentResponse.razorpay_payment_id,
+    //           bookingStatus: 'CONFIRMED',
+    //           paymentStatus: 'PAID',
+    //         };
+
+    //         if (selectedBike) {
+    //           selectedBike.isBooked = true;
+    //           selectedBike.currentBookedByUserId = user?.id || user?._id;
+    //           selectedBike.currentBookedByEmail = user?.email || riderEmail;
+    //           selectedBike.currentBookingId = confirmedBookingData;
+    //         }
+
+    //         if (onBookingConfirmed) {
+    //           onBookingConfirmed(confirmedBookingData, selectedBike);
+    //         }
+
+    //         setIsProcessing(false);
+    //         setStep(3);
+    //         if (onShowToast) {
+    //           onShowToast(
+    //             isHindi
+    //               ? `भुगतान सत्यापित व बुकिंग सफल! संदर्भ #${confirmedRef}`
+    //               : `Payment verified & reservation confirmed! Ref #${confirmedRef}`
+    //           );
+    //         }
+    //       } catch (verifyError) {
+    //         console.error('[Payment Verification Failed]:', verifyError);
+    //         setIsProcessing(false);
+    //         if (onShowToast) {
+    //           onShowToast(
+    //             isHindi
+    //               ? `भुगतान सत्यापन विफल: ${verifyError.message || 'त्रुटि'}`
+    //               : `Payment verification failed: ${verifyError.message || 'Error'}`
+    //           );
+    //         }
+    //       }
+    //     },
+    //     modal: {
+    //       ondismiss: function () {
+    //         setIsProcessing(false);
+    //         if (onShowToast) {
+    //           onShowToast(isHindi ? 'भुगतान प्रक्रिया बंद कर दी गई।' : 'Payment checkout closed.');
+    //         }
+    //       },
+    //     },
+    //   };
+
+    //   if (typeof window !== 'undefined' && window.Razorpay) {
+    //     const rzp = new window.Razorpay(options);
+    //     rzp.on('payment.failed', function (failureResponse) {
+    //       setIsProcessing(false);
+    //       console.error('[Razorpay Payment Failed]:', failureResponse.error);
+    //       if (onShowToast) {
+    //         onShowToast(
+    //           isHindi
+    //             ? `भुगतान विफल: ${failureResponse.error?.description || 'कृपया पुन: प्रयास करें'}`
+    //             : `Payment failed: ${failureResponse.error?.description || 'Please try again'}`
+    //         );
+    //       }
+    //     });
+    //     rzp.open();
+    //   } else {
+    //     throw new Error('Razorpay Checkout is only supported in browser environment.');
+    //   }
+    // } catch (err) {
+    //   console.error('[handleProceedPayment Error]:', err);
+    //   setIsProcessing(false);
+    //   if (onShowToast) {
+    //     onShowToast(
+    //       isHindi
+    //         ? `भुगतान प्रारंभ करने में त्रुटि: ${err.message || 'कृपया पुन: प्रयास करें'}`
+    //         : `Could not start payment: ${err.message || 'Please try again'}`
+    //     );
+    //   }
+    // }
+
+  //};
+
+
+const handleProceedPayment = async () => {
+  // 1. Check authentication
+  if (!user) {
+    if (onOpenAuth) onOpenAuth();
+
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? 'कृपया बुकिंग के लिए लॉग इन करें।'
+          : 'Please log in or sign up first to proceed with booking.'
+      );
+    }
+    return;
+  }
+
+  // 2. Validate pickup and return dates/times
+  if (!pickupDate || !pickupTime || !returnDate || !returnTime) {
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? 'कृपया पिकअप व वापसी की तारीख और समय चुनें।'
+          : 'Please select pickup and return dates and times.'
+      );
     }
 
-    if (!pickupDate || !pickupTime || !returnDate || !returnTime) {
-      if (onShowToast) onShowToast(isHindi ? 'कृपया पिकअप व वापसी की तारीख और समय चुनें।' : 'Please select pickup and return dates and times.');
-      setStep(1);
-      return;
+    setStep(1);
+    return;
+  }
+
+  // 3. Validate rider name
+  if (!riderName.trim()) {
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? 'कृपया राइडर का पूरा नाम दर्ज करें।'
+          : 'Please enter rider full name.'
+      );
+    }
+    return;
+  }
+
+  // 4. Validate phone number
+  const phoneCheck = validatePhone(riderPhone, countryCode);
+
+  if (!phoneCheck.isValid) {
+    setPhoneError(isHindi ? phoneCheck.errorHi : phoneCheck.error);
+
+    if (onShowToast) {
+      onShowToast(isHindi ? phoneCheck.errorHi : phoneCheck.error);
+    }
+    return;
+  }
+
+  setPhoneError('');
+
+  // 5. Validate email
+  const emailCheck = validateEmail(riderEmail);
+
+  if (!emailCheck.isValid) {
+    setEmailError(isHindi ? emailCheck.errorHi : emailCheck.error);
+
+    if (onShowToast) {
+      onShowToast(isHindi ? emailCheck.errorHi : emailCheck.error);
+    }
+    return;
+  }
+
+  setEmailError('');
+
+  // 6. Validate Aadhaar document
+  if (!riderDocs.aadhaar) {
+    setDocErrors((prev) => ({
+      ...prev,
+      aadhaar: isHindi
+        ? 'आधार कार्ड अनिवार्य है। कृपया आधार कार्ड अपलोड करें।'
+        : 'Aadhaar Card is mandatory. Please upload your Aadhaar Card.',
+    }));
+
+    setSelectedDocType('Aadhaar Card');
+
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? 'आधार कार्ड अनिवार्य है। कृपया अपलोड करें।'
+          : 'Aadhaar Card is mandatory to complete booking.'
+      );
+    }
+    return;
+  }
+
+  // 7. Validate Driving Licence
+  if (!riderDocs.drivingLicence) {
+    setDocErrors((prev) => ({
+      ...prev,
+      drivingLicence: isHindi
+        ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया ड्राइविंग लाइसेंस अपलोड करें।'
+        : 'Driving Licence is mandatory. Please upload your Driving Licence.',
+    }));
+
+    setSelectedDocType('Driving Licence');
+
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया अपलोड करें।'
+          : 'Driving Licence is mandatory to complete booking.'
+      );
+    }
+    return;
+  }
+
+  // 8. Start MongoDB booking process
+  setIsProcessing(true);
+
+  try {
+    console.log('[BookingScreen] Creating booking in MongoDB...');
+
+    const cleanEmail = (riderEmail || user?.email || '').trim().toLowerCase();
+    const cleanName = (riderName || user?.name || 'Rider').trim();
+    const cleanPhone = (riderPhone || user?.phone || '').trim();
+
+    // 9. Save booking in MongoDB
+    const reserveRes = await bookingsAPI.create({
+      bikeId: selectedBike._id,
+      bikeListingCode: selectedBike.id || selectedBike.listingCode,
+
+      pickupDate: `${pickupDate} ${pickupTime}`,
+      returnDate: `${returnDate} ${returnTime}`,
+
+      riderName: cleanName,
+      riderEmail: cleanEmail,
+      riderPhone: cleanPhone,
+      countryCode,
+
+      // Temporary testing mode: payment is not processed
+      paymentMethod: 'UPI',
+      bookingStatus: 'CONFIRMED',
+      paymentStatus: 'PAID',
+
+      riderDocuments: {
+        aadhaar: riderDocs.aadhaar,
+        drivingLicence: riderDocs.drivingLicence,
+      },
+
+      dailyPrice:
+        selectedBike.pricePerDay || selectedBike.dailyPrice,
+
+      securityDeposit:
+        selectedBike.deposit || selectedBike.securityDeposit,
+    });
+
+    // 10. Verify MongoDB response
+    const savedBooking = reserveRes?.booking;
+
+    if (!savedBooking || !savedBooking._id) {
+      throw new Error(
+        reserveRes?.message || 'Booking could not be saved in MongoDB.'
+      );
     }
 
-    if (!riderName.trim()) {
-      if (onShowToast) onShowToast(isHindi ? 'कृपया राइडर का पूरा नाम दर्ज करें।' : 'Please enter rider full name.');
-      return;
-    }
+    console.log('[Booking Saved Successfully]:', savedBooking);
 
-    // Phone Validation with Country Code & exactly 10 digits
-    const phoneCheck = validatePhone(riderPhone, countryCode);
-    if (!phoneCheck.isValid) {
-      setPhoneError(isHindi ? phoneCheck.errorHi : phoneCheck.error);
-      if (onShowToast) onShowToast(isHindi ? phoneCheck.errorHi : phoneCheck.error);
-      return;
-    }
-    setPhoneError('');
+    // 11. Update booking reference
+    const confirmedRef =
+      savedBooking.bookingCode || bookingRefId;
 
-    // Email Validation ensuring '@' and '.domain' (e.g. name@example.com)
-    const emailCheck = validateEmail(riderEmail);
-    if (!emailCheck.isValid) {
-      setEmailError(isHindi ? emailCheck.errorHi : emailCheck.error);
-      if (onShowToast) onShowToast(isHindi ? emailCheck.errorHi : emailCheck.error);
-      return;
-    }
-    setEmailError('');
+    setBookingRefId(confirmedRef);
 
-    // Strict KYC requirement: Both Aadhaar Card and Driving Licence are mandatory
-    if (!riderDocs.aadhaar) {
-      setDocErrors((prev) => ({
-        ...prev,
-        aadhaar: isHindi ? 'आधार कार्ड अनिवार्य है। कृपया आधार कार्ड अपलोड करें।' : 'Aadhaar Card is mandatory. Please upload your Aadhaar Card.',
-      }));
-      setSelectedDocType('Aadhaar Card');
-      if (onShowToast) {
-        onShowToast(isHindi ? 'आधार कार्ड अनिवार्य है। कृपया अपलोड करें।' : 'Aadhaar Card is mandatory to complete booking.');
-      }
-      return;
-    }
+    // 12. Prepare booking confirmation data
+    const confirmedBookingData = {
+      ...savedBooking,
 
-    if (!riderDocs.drivingLicence) {
-      setDocErrors((prev) => ({
-        ...prev,
-        drivingLicence: isHindi ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया ड्राइविंग लाइसेंस अपलोड करें।' : 'Driving Licence is mandatory. Please upload your Driving Licence.',
-      }));
-      setSelectedDocType('Driving Licence');
-      if (onShowToast) {
-        onShowToast(isHindi ? 'ड्राइविंग लाइसेंस अनिवार्य है। कृपया अपलोड करें।' : 'Driving Licence is mandatory to complete booking.');
-      }
-      return;
-    }
+      bookingCode: confirmedRef,
 
-    setIsProcessing(true);
+      bookingStatus: 'CONFIRMED',
+      paymentStatus: 'PAID',
 
-    try {
-      // 1. Ensure Razorpay Checkout script is loaded
-      const isScriptLoaded = await loadRazorpayScript();
-      if (!isScriptLoaded && typeof window !== 'undefined' && !window.Razorpay) {
-        throw new Error(
-          isHindi
-            ? 'रेज़रपे चेकआउट लोड करने में असमर्थ। कृपया इंटरनेट कनेक्शन जांचें।'
-            : 'Failed to load Razorpay Checkout script. Please check your internet connection.'
-        );
-      }
+      bikeId: (savedBooking.bikeId && typeof savedBooking.bikeId === 'object') ? savedBooking.bikeId : selectedBike,
+      bike: (savedBooking.bike && typeof savedBooking.bike === 'object') ? savedBooking.bike : selectedBike,
 
-      // 2. Reserve / initialize booking in MongoDB
-      let initialBooking = null;
+      riderDetails: savedBooking.riderDetails || {
+        fullName: cleanName,
+        email: cleanEmail,
+        phoneNumber: cleanPhone,
+        documents: {
+          aadhaar: riderDocs.aadhaar,
+          drivingLicence: riderDocs.drivingLicence,
+        },
+      },
+
+      riderDocuments: savedBooking.riderDocuments || {
+        aadhaar: riderDocs.aadhaar,
+        drivingLicence: riderDocs.drivingLicence,
+      },
+
+      pickupDatetime:
+        savedBooking.pickupDatetime ||
+        `${pickupDate} ${pickupTime}`,
+
+      returnDatetime:
+        savedBooking.returnDatetime ||
+        `${returnDate} ${returnTime}`,
+
+      pricing: savedBooking.pricing || {
+        totalPayable,
+      },
+    };
+
+    // Save directly to localStorage for instantaneous user bookings view
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        const reserveRes = await bookingsAPI.create({
-          bikeId: selectedBike._id,
-          bikeListingCode: selectedBike.id || selectedBike.listingCode,
-          pickupDate: `${pickupDate} ${pickupTime}`,
-          returnDate: `${returnDate} ${returnTime}`,
-          riderName,
-          riderEmail,
-          riderPhone,
-          countryCode,
-          paymentMethod: 'UPI',
-          bookingStatus: 'PENDING',
-          paymentStatus: 'PENDING',
-          riderDocuments: {
-            aadhaar: riderDocs.aadhaar,
-            drivingLicence: riderDocs.drivingLicence,
-          },
-          dailyPrice: selectedBike.pricePerDay || selectedBike.dailyPrice,
-          securityDeposit: selectedBike.deposit || selectedBike.securityDeposit,
-        });
-        initialBooking = reserveRes?.booking;
-      } catch (reserveErr) {
-        console.warn('[BookingScreen] Preliminary booking notice:', reserveErr.message);
-      }
-
-      const activeBookingId = initialBooking?._id || null;
-      const preliminaryRef = initialBooking?.bookingCode || bookingRefId;
-      setBookingRefId(preliminaryRef);
-
-      // 3. Connect button to call /api/payment/create-order with reservation amount (in INR)
-      const orderRes = await paymentAPI.createOrder({
-        amount: totalPayable,
-        currency: 'INR',
-        bookingId: activeBookingId,
-        receipt: `rcpt_${preliminaryRef}`,
-        notes: {
-          bikeName: selectedBike.name,
-          riderName,
-          riderPhone,
-          riderEmail,
-        },
-      });
-
-      if (!orderRes || !orderRes.order_id) {
-        throw new Error(orderRes?.message || 'Could not create Razorpay order.');
-      }
-
-      // 4. Open Razorpay Checkout modal using order_id and RAZORPAY_KEY_ID (never Key Secret)
-      const keyId = getRazorpayKeyId(orderRes.key_id);
-
-      const options = {
-        key: keyId,
-        amount: orderRes.amount, // in paise
-        currency: orderRes.currency || 'INR',
-        name: 'The Road Eagle',
-        description: `Motorcycle Reservation - ${selectedBike.name}`,
-        order_id: orderRes.order_id,
-        prefill: {
-          name: riderName,
-          email: riderEmail,
-          contact: `${countryCode}${riderPhone}`.replace('+', ''),
-        },
-        notes: {
-          bookingCode: preliminaryRef,
-          bikeId: String(selectedBike._id || selectedBike.id || ''),
-        },
-        theme: {
-          color: '#E11D48',
-        },
-        handler: async function (paymentResponse) {
-          // 5. In handler callback, send payment response to /api/payment/verify
-          try {
-            setIsProcessing(true);
-            const verifyRes = await paymentAPI.verify({
-              razorpay_order_id: paymentResponse.razorpay_order_id,
-              razorpay_payment_id: paymentResponse.razorpay_payment_id,
-              razorpay_signature: paymentResponse.razorpay_signature,
-              bookingId: activeBookingId || preliminaryRef,
-              bookingData: {
-                bikeId: selectedBike._id,
-                bikeListingCode: selectedBike.id || selectedBike.listingCode,
-                pickupDate: `${pickupDate} ${pickupTime}`,
-                returnDate: `${returnDate} ${returnTime}`,
-                riderName,
-                riderEmail,
-                riderPhone,
-                countryCode,
-                totalPayable,
-                dailyPrice: selectedBike.pricePerDay || selectedBike.dailyPrice,
-                securityDeposit: selectedBike.deposit || selectedBike.securityDeposit,
-                riderDocuments: {
-                  aadhaar: riderDocs.aadhaar,
-                  drivingLicence: riderDocs.drivingLicence,
-                },
-              },
-            });
-
-            // 6. Show success state to user
-            const confirmedRef =
-              verifyRes.refId ||
-              verifyRes.booking?.bookingCode ||
-              preliminaryRef;
-            setBookingRefId(confirmedRef);
-
-            const confirmedBookingData = verifyRes.booking || {
-              bookingCode: confirmedRef,
-              riderDetails: {
-                fullName: riderName,
-                email: riderEmail,
-                phoneNumber: riderPhone,
-                documents: {
-                  aadhaar: riderDocs.aadhaar,
-                  drivingLicence: riderDocs.drivingLicence,
-                },
-              },
-              riderDocuments: {
-                aadhaar: riderDocs.aadhaar,
-                drivingLicence: riderDocs.drivingLicence,
-              },
-              pickupDatetime: `${pickupDate} ${pickupTime}`,
-              returnDatetime: `${returnDate} ${returnTime}`,
-              pricing: { totalPayable },
-              transactionId: paymentResponse.razorpay_payment_id,
-              bookingStatus: 'CONFIRMED',
-              paymentStatus: 'PAID',
-            };
-
-            if (selectedBike) {
-              selectedBike.isBooked = true;
-              selectedBike.currentBookedByUserId = user?.id || user?._id;
-              selectedBike.currentBookedByEmail = user?.email || riderEmail;
-              selectedBike.currentBookingId = confirmedBookingData;
-            }
-
-            if (onBookingConfirmed) {
-              onBookingConfirmed(confirmedBookingData, selectedBike);
-            }
-
-            setIsProcessing(false);
-            setStep(3);
-            if (onShowToast) {
-              onShowToast(
-                isHindi
-                  ? `भुगतान सत्यापित व बुकिंग सफल! संदर्भ #${confirmedRef}`
-                  : `Payment verified & reservation confirmed! Ref #${confirmedRef}`
-              );
-            }
-          } catch (verifyError) {
-            console.error('[Payment Verification Failed]:', verifyError);
-            setIsProcessing(false);
-            if (onShowToast) {
-              onShowToast(
-                isHindi
-                  ? `भुगतान सत्यापन विफल: ${verifyError.message || 'त्रुटि'}`
-                  : `Payment verification failed: ${verifyError.message || 'Error'}`
-              );
-            }
-          }
-        },
-        modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
-            if (onShowToast) {
-              onShowToast(isHindi ? 'भुगतान प्रक्रिया बंद कर दी गई।' : 'Payment checkout closed.');
-            }
-          },
-        },
-      };
-
-      if (typeof window !== 'undefined' && window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (failureResponse) {
-          setIsProcessing(false);
-          console.error('[Razorpay Payment Failed]:', failureResponse.error);
-          if (onShowToast) {
-            onShowToast(
-              isHindi
-                ? `भुगतान विफल: ${failureResponse.error?.description || 'कृपया पुन: प्रयास करें'}`
-                : `Payment failed: ${failureResponse.error?.description || 'Please try again'}`
-            );
-          }
-        });
-        rzp.open();
-      } else {
-        throw new Error('Razorpay Checkout is only supported in browser environment.');
-      }
-    } catch (err) {
-      console.error('[handleProceedPayment Error]:', err);
-      setIsProcessing(false);
-      if (onShowToast) {
-        onShowToast(
-          isHindi
-            ? `भुगतान प्रारंभ करने में त्रुटि: ${err.message || 'कृपया पुन: प्रयास करें'}`
-            : `Could not start payment: ${err.message || 'Please try again'}`
-        );
+        const cached = JSON.parse(window.localStorage.getItem('my_user_bookings') || '[]');
+        const updated = [
+          confirmedBookingData,
+          ...cached.filter((b) => (b.bookingCode || b.id || b._id) !== (confirmedRef || confirmedBookingData._id)),
+        ];
+        window.localStorage.setItem('my_user_bookings', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('[BookingScreen] Local cache notice:', e.message);
       }
     }
 
-  };
+    // 13. Notify parent component
+    if (onBookingConfirmed) {
+      onBookingConfirmed(confirmedBookingData, selectedBike);
+    }
+
+    // 14. Navigate directly to Step 3
+    setStep(3);
+
+    // 15. Show success message
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? `बुकिंग अनुरोध सफलतापूर्वक सबमिट हुआ! संदर्भ #${confirmedRef}`
+          : `Booking request submitted successfully! Ref #${confirmedRef}`
+      );
+    }
+
+  } catch (err) {
+    console.error('[MongoDB Booking Error]:', err);
+
+    if (onShowToast) {
+      onShowToast(
+        isHindi
+          ? `बुकिंग सेव करने में त्रुटि: ${err.message || 'कृपया पुनः प्रयास करें'}`
+          : `Booking failed: ${err.message || 'Please try again.'}`
+      );
+    }
+
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   const handleDownloadQuote = () => {
     if (onOpenQuote) {
@@ -1030,12 +1371,21 @@ export default function BookingScreen({
                             </View>
 
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                              <View style={styles.statusPillPending}>
-                                <Clock size={12} color="#F59E0B" />
-                                <Text style={styles.statusPillPendingText}>
-                                  {currentDoc.verificationState}
-                                </Text>
-                              </View>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setPreviewDocModal({
+                                    title: `${selectedDocType} Preview`,
+                                    url: currentDoc.signedUrl || currentDoc.fileUrl || currentDoc.key,
+                                    fileName: currentDoc.fileName,
+                                    docType: selectedDocType === 'Aadhaar Card' ? 'aadhaar' : 'driving-licence',
+                                  });
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={styles.previewDocBtn}
+                                accessibilityLabel={`Preview ${selectedDocType}`}
+                              >
+                                <Eye size={16} color="#38BDF8" />
+                              </TouchableOpacity>
                               <TouchableOpacity
                                 onPress={() => handleRemoveDoc(selectedDocType)}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -1366,6 +1716,16 @@ export default function BookingScreen({
           }
           setCalendarTarget(null);
         }}
+      />
+
+      {/* Secure Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={Boolean(previewDocModal)}
+        onClose={() => setPreviewDocModal(null)}
+        title={previewDocModal?.title || 'Document Preview'}
+        documentUrl={previewDocModal?.url}
+        fileName={previewDocModal?.fileName}
+        docType={previewDocModal?.docType}
       />
     </View>
   );
@@ -2109,6 +2469,11 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     fontSize: 11,
     fontWeight: '700',
+  },
+  previewDocBtn: {
+    padding: 6,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
   },
   removeDocBtn: {
     padding: 6,

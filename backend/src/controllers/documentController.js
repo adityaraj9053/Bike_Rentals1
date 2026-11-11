@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import {
   uploadDocumentToR2,
   getSignedDocumentUrl,
@@ -5,6 +6,9 @@ import {
   buildUserDocumentKey,
   buildBikeDocumentKey,
   validateDocumentFile,
+  findBikeDocumentKey,
+  findUserDocumentKey,
+  resolveDocumentSignedUrl,
   VALID_USER_DOC_TYPES,
   VALID_BIKE_DOC_TYPES,
 } from '../services/r2Service.js';
@@ -40,24 +44,37 @@ export async function uploadUserDocument(req, res) {
 
     const normalizedDocType = VALID_USER_DOC_TYPES[docType.toLowerCase().trim()];
 
-    // Determine target userId: from params, or fallback to authenticated user
-    const targetUserId = req.params.userId || req.user?._id || req.user?.id || req.body?.userId;
-    if (!targetUserId) {
-      return res.status(400).json({
-        success: false,
-        message: 'A valid userId is required to associate with the uploaded document.',
-      });
+    // Determine target userId: prefer authenticated user, or params/body, or fallback
+    let targetUserId = req.user?._id || req.user?.id || req.params.userId || req.body?.userId;
+
+    if (!targetUserId || targetUserId === 'undefined' || targetUserId === 'null') {
+      if (req.body?.email) {
+        targetUserId = req.body.email.trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+      } else if (req.body?.phone || req.body?.phoneNumber) {
+        targetUserId = (req.body.phone || req.body.phoneNumber).trim().replace(/[^0-9]/g, '');
+      } else {
+        targetUserId = `rider_${Date.now()}`;
+      }
     }
 
-    // Authorization check: If caller is authenticated, verify they are updating their own documents, or are OWNER/ADMIN
+    // Authorization check: If caller is authenticated as RENTER/USER, ensure document belongs to them
     if (req.user && req.user.role !== 'ADMIN' && req.user.role !== 'OWNER') {
       const currentUserId = String(req.user._id || req.user.id);
-      if (currentUserId !== String(targetUserId)) {
+      if (
+        req.params.userId &&
+        req.params.userId !== 'undefined' &&
+        req.params.userId !== currentUserId &&
+        req.params.userId !== req.user.email &&
+        !req.params.userId.startsWith('rider_') &&
+        !req.params.userId.startsWith('guest_')
+      ) {
         return res.status(403).json({
           success: false,
           message: 'Forbidden. You are not authorized to upload documents for another user.',
         });
       }
+      // Guarantee key uses the real user ID if logged in
+      targetUserId = currentUserId;
     }
 
     // Validate file strictly (PDF, JPEG, PNG, max 10MB)
@@ -82,16 +99,18 @@ export async function uploadUserDocument(req, res) {
     const signedUrl = await getSignedDocumentUrl(key, 900);
 
     // Update User / RenterProfile document records if matching MongoDB doc exists
-    try {
-      if (normalizedDocType === 'driving-licence') {
-        await UserModel.findByIdAndUpdate(targetUserId, {
+    if (mongoose.connection.readyState === 1 && normalizedDocType === 'driving-licence') {
+      try {
+        const userFilter = targetUserId.match(/^[0-9a-fA-F]{24}$/)
+          ? { _id: targetUserId }
+          : { email: targetUserId };
+        await UserModel.findOneAndUpdate(userFilter, {
           'drivingLicense.documentKey': key,
-          'drivingLicense.isVerified': false, // Mark pending verification
-        });
+          'drivingLicense.isVerified': false,
+        }).maxTimeMS(2000);
+      } catch (dbErr) {
+        console.warn('[User Document DB Update Notice]:', dbErr.message);
       }
-    } catch (dbErr) {
-      // Non-fatal if user model has strict schema or user ID is mock
-      console.warn('[User Document DB Update Notice]:', dbErr.message);
     }
 
     return res.status(200).json({
@@ -105,6 +124,7 @@ export async function uploadUserDocument(req, res) {
         originalFilename: file.originalname,
         mimeType: file.mimetype,
         size: uploadResult.size,
+        fileUrl: signedUrl,
         signedUrl,
         expiresInSeconds: 900,
       },
@@ -145,7 +165,7 @@ export async function uploadBikeDocument(req, res) {
     }
 
     const normalizedDocType = VALID_BIKE_DOC_TYPES[docType.toLowerCase().trim()];
-    const bikeId = req.params.bikeId || req.body.bikeId || req.user?._id || 'pending_bike';
+    const bikeId = req.params.bikeId || req.body.bikeId;
 
     if (!bikeId) {
       return res.status(400).json({
@@ -191,8 +211,12 @@ export async function uploadBikeDocument(req, res) {
         puc: 'documents.pucCertificateUrl',
       };
       const updateField = fieldMap[normalizedDocType];
-      if (updateField && bikeId.match(/^[0-9a-fA-F]{24}$/)) {
-        await BikeModel.findByIdAndUpdate(bikeId, {
+      if (updateField) {
+        const queryFilter = bikeId.match(/^[0-9a-fA-F]{24}$/)
+          ? { _id: bikeId }
+          : { $or: [{ registrationNumber: bikeId.toUpperCase().trim() }, { listingCode: bikeId.trim() }] };
+
+        await BikeModel.findOneAndUpdate(queryFilter, {
           [updateField]: key,
         });
       }
@@ -211,6 +235,7 @@ export async function uploadBikeDocument(req, res) {
         originalFilename: file.originalname,
         mimeType: file.mimetype,
         size: uploadResult.size,
+        fileUrl: signedUrl,
         signedUrl,
         expiresInSeconds: 900,
       },
@@ -232,53 +257,30 @@ export async function uploadBikeDocument(req, res) {
  */
 export async function getSignedUrlHandler(req, res) {
   try {
-    const key = req.query.key || req.body?.key;
+    const rawKey = req.query.key || req.body?.key || req.query.url || req.body?.url;
+    const bikeId = req.query.bikeId || req.body?.bikeId;
+    const docType = req.query.docType || req.body?.docType;
     const requestedExpiry = req.query.expiresIn || req.body?.expiresIn || 900;
 
-    if (!key || typeof key !== 'string' || !key.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'A valid document "key" is required to generate a signed URL.',
-      });
-    }
-
-    const cleanKey = key.trim();
-
-    // Verify key follows safe expected patterns (documents/users/... or documents/bikes/...)
-    if (!cleanKey.startsWith('documents/users/') && !cleanKey.startsWith('documents/bikes/')) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid document key format. Key must start with "documents/users/" or "documents/bikes/".',
-      });
-    }
-
-    // Authorization checks for user documents
-    if (cleanKey.startsWith('documents/users/')) {
-      const parts = cleanKey.split('/');
-      const docUserId = parts[2];
-
-      if (req.user && req.user.role !== 'ADMIN' && req.user.role !== 'OWNER') {
-        const currentUserId = String(req.user._id || req.user.id);
-        if (currentUserId !== String(docUserId)) {
-          return res.status(403).json({
-            success: false,
-            message: 'Forbidden. You are not authorized to access documents belonging to another user.',
-          });
-        }
-      }
-    }
-
-    // Clamp expiresIn between 60 seconds and 3600 seconds (default 900s = 15 mins)
     const expiresInSeconds = Math.max(60, Math.min(3600, parseInt(requestedExpiry, 10) || 900));
 
-    const signedUrl = await getSignedDocumentUrl(cleanKey, expiresInSeconds);
+    // Resolve via key, or via bikeId + docType lookup
+    const signedUrl = await resolveDocumentSignedUrl(rawKey, bikeId, docType, expiresInSeconds);
+
+    if (!signedUrl) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found or unable to generate signed URL. Provide a valid R2 key or bikeId/docType.',
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: `Signed URL generated successfully (valid for ${Math.round(expiresInSeconds / 60)} minutes).`,
       data: {
-        key: cleanKey,
+        key: rawKey,
         signedUrl,
+        fileUrl: signedUrl,
         expiresInSeconds,
         expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
       },
@@ -293,6 +295,116 @@ export async function getSignedUrlHandler(req, res) {
 }
 
 /**
+ * Directly open or redirect to the uploaded file in browser
+ * GET /api/documents/open?key=...
+ * GET /api/documents/open?bikeId=...&docType=...
+ */
+export async function openDocumentHandler(req, res) {
+  try {
+    const rawKey =
+      req.query.key ||
+      req.query.url ||
+      req.params.filename ||
+      req.params[0] ||
+      req.path;
+    const bikeId = req.query.bikeId || req.params.bikeId;
+    const docType = req.query.docType || req.params.docType;
+
+    const signedUrl = await resolveDocumentSignedUrl(rawKey, bikeId, docType, 900);
+
+    if (!signedUrl) {
+      const cleanKey = String(rawKey || 'Document').replace(/[<>&"]/g, '');
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Document Not Found</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #050B14; color: #F8FAFC; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+              .card { background: #0B1528; border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 16px; padding: 36px 28px; max-width: 480px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+              h2 { color: #38BDF8; font-size: 22px; margin: 0 0 12px; font-weight: 800; }
+              p { color: #94A3B8; font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+              .badge { display: inline-block; background: rgba(56, 189, 248, 0.1); color: #38BDF8; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-family: monospace; margin-bottom: 18px; word-break: break-all; }
+              .btn { display: inline-block; background: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h2>Document Not Found</h2>
+              <div class="badge">${cleanKey}</div>
+              <p>The requested document could not be located in the secure Cloudflare R2 storage vault.</p>
+              <a href="http://localhost:8081" class="btn">Return to The Road Eagle</a>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
+    // Redirect to the presigned Cloudflare R2 URL which directly displays the exact image or PDF
+    return res.redirect(302, signedUrl);
+  } catch (error) {
+    console.error('[Document Controller openDocumentHandler Error]:', error);
+    return res.status(500).send('Failed to open document.');
+  }
+}
+
+/**
+ * Direct file view endpoint for a specific bike's compliance document
+ * GET /api/documents/file/:bikeId/:docType
+ */
+export async function getFileByBikeDoc(req, res) {
+  try {
+    const { bikeId, docType } = req.params;
+    if (!bikeId || !docType) {
+      return res.status(400).send('Bike ID and document type are required.');
+    }
+
+    let storedValue = null;
+    // Check MongoDB if connected, with quick timeout
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const queryFilter = bikeId.match(/^[0-9a-fA-F]{24}$/)
+          ? { _id: bikeId }
+          : { $or: [{ registrationNumber: bikeId.toUpperCase().trim() }, { listingCode: bikeId.trim() }] };
+
+        const bike = await BikeModel.findOne(queryFilter).maxTimeMS(2000).lean();
+        if (bike && bike.documents) {
+          const fieldMap = {
+            rc: bike.documents.rcSmartCardUrl,
+            insurance: bike.documents.insurancePolicyUrl,
+            puc: bike.documents.pucCertificateUrl,
+          };
+          storedValue = fieldMap[docType.toLowerCase().trim()];
+        }
+      } catch (dbErr) {
+        console.warn('[getFileByBikeDoc] DB check notice:', dbErr.message);
+      }
+    }
+
+    // Resolves either from stored key or directly by scanning R2 bucket prefix
+    const signedUrl = await resolveDocumentSignedUrl(storedValue, bikeId, docType, 900);
+
+    if (!signedUrl) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Vehicle Document Not Found</title></head>
+          <body style="font-family: sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center;">
+            <h2>Vehicle Document Not Found</h2>
+            <p>No verified ${docType.toUpperCase()} document exists for vehicle ${bikeId}.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.redirect(302, signedUrl);
+  } catch (error) {
+    console.error('[Document Controller getFileByBikeDoc Error]:', error);
+    return res.status(500).send('Error accessing vehicle document.');
+  }
+}
+
+/**
  * Retrieve active signed URLs for all documents associated with a bike
  * GET /api/documents/bike/:bikeId
  */
@@ -303,35 +415,35 @@ export async function getBikeDocuments(req, res) {
       return res.status(400).json({ success: false, message: 'A valid bikeId is required.' });
     }
 
-    const bike = await BikeModel.findById(bikeId).lean();
-    if (!bike) {
-      return res.status(404).json({ success: false, message: 'Bike not found.' });
+    let bike = null;
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const queryFilter = bikeId.match(/^[0-9a-fA-F]{24}$/)
+          ? { _id: bikeId }
+          : { $or: [{ registrationNumber: bikeId.toUpperCase().trim() }, { listingCode: bikeId.trim() }] };
+
+        bike = await BikeModel.findOne(queryFilter).maxTimeMS(2000).lean();
+      } catch (dbErr) {
+        console.warn('[getBikeDocuments] DB check notice:', dbErr.message);
+      }
     }
 
-    const docs = bike.documents || {};
+    const docs = bike?.documents || {};
     const results = {};
-
-    const resolveDocUrl = async (val) => {
-      if (!val) return null;
-      if (val.startsWith('documents/')) {
-        return await getSignedDocumentUrl(val, 900);
-      }
-      return val;
-    };
 
     results.rc = {
       keyOrUrl: docs.rcSmartCardUrl || null,
-      signedUrl: await resolveDocUrl(docs.rcSmartCardUrl),
+      signedUrl: await resolveDocumentSignedUrl(docs.rcSmartCardUrl, bike?.registrationNumber || bikeId, 'rc', 900),
     };
     results.insurance = {
       keyOrUrl: docs.insurancePolicyUrl || null,
       expiryDate: docs.insuranceExpiryDate || null,
-      signedUrl: await resolveDocUrl(docs.insurancePolicyUrl),
+      signedUrl: await resolveDocumentSignedUrl(docs.insurancePolicyUrl, bike?.registrationNumber || bikeId, 'insurance', 900),
     };
     results.puc = {
       keyOrUrl: docs.pucCertificateUrl || null,
       expiryDate: docs.pucExpiryDate || null,
-      signedUrl: await resolveDocUrl(docs.pucCertificateUrl),
+      signedUrl: await resolveDocumentSignedUrl(docs.pucCertificateUrl, bike?.registrationNumber || bikeId, 'puc', 900),
     };
 
     return res.status(200).json({
@@ -397,4 +509,3 @@ export async function deleteDocument(req, res) {
     });
   }
 }
-

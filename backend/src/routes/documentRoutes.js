@@ -6,10 +6,20 @@ import {
   getSignedUrlHandler,
   getBikeDocuments,
   deleteDocument,
+  openDocumentHandler,
+  getFileByBikeDoc,
 } from '../controllers/documentController.js';
 import { optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
+
+/**
+ * Direct file view/download endpoints (Immediately redirects to the Cloudflare R2 presigned file)
+ * - GET /api/documents/open?key=...
+ * - GET /api/documents/file/:bikeId/:docType
+ */
+router.get('/open', openDocumentHandler);
+router.get('/file/:bikeId/:docType', getFileByBikeDoc);
 
 /**
  * User Identity Documents Upload (Aadhaar, Driving Licence)
@@ -51,4 +61,3 @@ router.get('/bike/:bikeId', optionalAuth, getBikeDocuments);
 router.delete('/', optionalAuth, deleteDocument);
 
 export default router;
-
