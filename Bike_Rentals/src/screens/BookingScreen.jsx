@@ -863,6 +863,11 @@ const handleProceedPayment = async () => {
       ...savedBooking,
 
       bookingCode: confirmedRef,
+      booking_code: confirmedRef,
+
+      phoneNumber: cleanPhone,
+      phone: cleanPhone,
+      phone_number: cleanPhone,
 
       bookingStatus: 'CONFIRMED',
       paymentStatus: 'PAID',
@@ -872,8 +877,11 @@ const handleProceedPayment = async () => {
 
       riderDetails: savedBooking.riderDetails || {
         fullName: cleanName,
+        name: cleanName,
         email: cleanEmail,
         phoneNumber: cleanPhone,
+        phone: cleanPhone,
+        phone_number: cleanPhone,
         documents: {
           aadhaar: riderDocs.aadhaar,
           drivingLicence: riderDocs.drivingLicence,
@@ -949,6 +957,8 @@ const handleProceedPayment = async () => {
     if (onOpenQuote) {
       onOpenQuote({
         refId: bookingRefId,
+        bookingCode: bookingRefId,
+        booking_code: bookingRefId,
         bike: selectedBike,
         pickupDate: pickupDate || 'Scheduled',
         pickupTime: pickupTime || 'Hub Time',
@@ -960,6 +970,9 @@ const handleProceedPayment = async () => {
         total: totalPayable,
         riderName: riderName || 'Rider',
         riderPhone: `${countryCode} ${riderPhone}`,
+        phoneNumber: `${countryCode} ${riderPhone}`,
+        phone: `${countryCode} ${riderPhone}`,
+        phone_number: `${countryCode} ${riderPhone}`,
         riderEmail: riderEmail || 'rider@example.com',
       });
     }

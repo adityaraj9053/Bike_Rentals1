@@ -7,6 +7,10 @@ const BookingSchema = new Schema({
     unique: true, // e.g. "RDE-891024"
     index: true,
   },
+  booking_code: {
+    type: String,
+    index: true,
+  },
   bikeId: {
     type: Schema.Types.ObjectId,
     ref: 'Bike',
@@ -20,6 +24,11 @@ const BookingSchema = new Schema({
     index: true,
   },
 
+  // Phone numbers column support
+  phoneNumber: { type: String, trim: true },
+  phone: { type: String, trim: true },
+  phone_number: { type: String, trim: true },
+
   // Schedule
   pickupDatetime: { type: Date, required: true },
   returnDatetime: { type: Date, required: true },
@@ -30,8 +39,11 @@ const BookingSchema = new Schema({
   // Rider Details at time of booking
   riderDetails: {
     fullName: String,
+    name: String,
     email: String,
     phoneNumber: String,
+    phone: String,
+    phone_number: String,
     dateOfBirth: Date,
     documents: {
       aadhaar: Schema.Types.Mixed,
@@ -76,6 +88,43 @@ const BookingSchema = new Schema({
 }, {
   timestamps: true,
   versionKey: false,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+});
+
+BookingSchema.pre('save', function () {
+  if (this.bookingCode && !this.booking_code) {
+    this.booking_code = this.bookingCode;
+  } else if (this.booking_code && !this.bookingCode) {
+    this.bookingCode = this.booking_code;
+  }
+
+  const p =
+    this.phoneNumber ||
+    this.phone ||
+    this.phone_number ||
+    this.riderDetails?.phoneNumber ||
+    this.riderDetails?.phone ||
+    this.riderDetails?.phone_number;
+
+  if (p) {
+    this.phoneNumber = p;
+    this.phone = p;
+    this.phone_number = p;
+    if (this.riderDetails) {
+      this.riderDetails.phoneNumber = p;
+      this.riderDetails.phone = p;
+      this.riderDetails.phone_number = p;
+    }
+  }
+
+  if (this.riderDetails) {
+    if (this.riderDetails.fullName && !this.riderDetails.name) {
+      this.riderDetails.name = this.riderDetails.fullName;
+    } else if (this.riderDetails.name && !this.riderDetails.fullName) {
+      this.riderDetails.fullName = this.riderDetails.name;
+    }
+  }
 });
 
 BookingSchema.index({ bikeId: 1, bookingStatus: 1, pickupDatetime: 1, returnDatetime: 1 });

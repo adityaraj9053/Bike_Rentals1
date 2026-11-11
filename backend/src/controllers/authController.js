@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -316,17 +317,37 @@ export async function getMe(req, res) {
 }
 
 /**
- * Check if a user's data is already in database
+ * Check if a user's data is already in database (by email or userId)
  */
 export async function checkUser(req, res) {
   try {
     const email = (req.query.email || req.body?.email || '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    const userId = (req.query.userId || req.query.id || req.body?.userId || '').trim();
+
+    if (!email && !userId) {
       return res.status(200).json({ success: true, exists: false, isExistingUser: false });
     }
+
+    const conditions = [];
+    if (email && email.includes('@')) {
+      conditions.push({ email });
+    }
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      conditions.push({ _id: userId });
+    }
+
+    if (conditions.length === 0) {
+      return res.status(200).json({ success: true, exists: false, isExistingUser: false });
+    }
+
     const ownerEmail = (process.env.OWNER_EMAIL || 'gamedevelop06@gmail.com').trim().toLowerCase();
-    const isOwner = email === ownerEmail;
-    const user = await UserModel.findOne({ email }).select('_id email fullName phoneNumber role').lean();
+    const user = await UserModel.findOne({ $or: conditions })
+      .select('_id email fullName phoneNumber phone phone_number role avatarUrl drivingLicense')
+      .lean();
+
+    const isOwner = user?.email === ownerEmail;
+    const phoneVal = user?.phoneNumber || user?.phone || user?.phone_number || '';
+
     return res.status(200).json({
       success: true,
       exists: Boolean(user),
@@ -335,11 +356,65 @@ export async function checkUser(req, res) {
         id: user._id.toString(),
         email: user.email,
         fullName: user.fullName,
+        name: user.fullName,
+        phoneNumber: phoneVal,
+        phone: phoneVal,
+        phone_number: phoneVal,
         role: isOwner ? 'OWNER' : user.role,
+        avatarUrl: user.avatarUrl,
+        drivingLicense: user.drivingLicense,
       } : null,
     });
   } catch (error) {
     return res.status(200).json({ success: true, exists: false, isExistingUser: false });
+  }
+}
+
+/**
+ * Get User Details by ID or Email
+ */
+export async function getUserById(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'User identifier required.' });
+    }
+
+    let query = {};
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query._id = id;
+    } else {
+      query.email = id.trim().toLowerCase();
+    }
+
+    const user = await UserModel.findOne(query)
+      .select('_id email fullName phoneNumber phone phone_number phoneCountryCode role drivingLicense avatarUrl')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found in users table.' });
+    }
+
+    const phoneVal = user.phoneNumber || user.phone || user.phone_number || '';
+
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        fullName: user.fullName,
+        name: user.fullName,
+        phoneNumber: phoneVal,
+        phone: phoneVal,
+        phone_number: phoneVal,
+        phoneCountryCode: user.phoneCountryCode || '+91',
+        role: user.role,
+        drivingLicense: user.drivingLicense,
+      },
+    });
+  } catch (error) {
+    console.error('[getUserById Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch user details.' });
   }
 }
 

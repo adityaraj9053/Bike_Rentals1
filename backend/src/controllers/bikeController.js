@@ -59,7 +59,10 @@ export async function getAllBikes(req, res) {
       // 👑 OWNER: Sees every bike in the fleet, populated with booking and renter details
       let query = BikeModel.find(baseFilter).populate({
         path: 'currentBookingId',
-        populate: { path: 'renterId', select: 'fullName email phoneNumber drivingLicense' },
+        populate: [
+          { path: 'renterId', select: 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense' },
+          { path: 'bikeId' },
+        ],
       });
 
       if (sort === 'price-asc') query = query.sort({ dailyPrice: 1 });
@@ -84,6 +87,10 @@ export async function getAllBikes(req, res) {
             currentBookedByUserId: null,
             currentBookedByEmail: null,
           };
+        }
+        if (bike.currentBookingId && typeof bike.currentBookingId === 'object') {
+          bike.currentBookingId.booking_code = bike.currentBookingId.booking_code || bike.currentBookingId.bookingCode;
+          bike.currentBookingId.bookingCode = bike.currentBookingId.bookingCode || bike.currentBookingId.booking_code;
         }
         return bike;
       });
@@ -152,7 +159,13 @@ export async function getAllBikes(req, res) {
       ? { $and: [baseFilter, visibilityQuery] }
       : visibilityQuery;
 
-    let query = BikeModel.find(finalFilter).populate('currentBookingId');
+    let query = BikeModel.find(finalFilter).populate({
+      path: 'currentBookingId',
+      populate: [
+        { path: 'renterId', select: 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense' },
+        { path: 'bikeId' },
+      ],
+    });
     if (sort === 'price-asc') query = query.sort({ dailyPrice: 1 });
     else if (sort === 'price-desc') query = query.sort({ dailyPrice: -1 });
     else query = query.sort({ createdAt: -1 });
@@ -195,6 +208,10 @@ export async function getAllBikes(req, res) {
           (currentUserEmail && bookedEmail && bookedEmail === currentUserEmail.toLowerCase())
         )
       );
+      if (bike.currentBookingId && typeof bike.currentBookingId === 'object') {
+        bike.currentBookingId.booking_code = bike.currentBookingId.booking_code || bike.currentBookingId.bookingCode;
+        bike.currentBookingId.bookingCode = bike.currentBookingId.bookingCode || bike.currentBookingId.booking_code;
+      }
       return {
         ...bike,
         currentBookedByEmail: bookedEmail,

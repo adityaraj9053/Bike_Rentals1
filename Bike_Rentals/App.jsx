@@ -311,11 +311,16 @@ export default function App() {
         .then((res) => {
           if (res?.user) {
             const isOwner = isOwnerUser(res.user);
+            const phoneVal = res.user.phoneNumber || res.user.phone || res.user.phone_number || cachedUser?.phone || cachedUser?.phoneNumber || '';
             const updated = {
               ...(cachedUser || {}),
               id: res.user.id || res.user._id,
-              name: res.user.fullName,
+              name: res.user.fullName || res.user.name,
+              fullName: res.user.fullName,
               email: res.user.email,
+              phone: phoneVal,
+              phoneNumber: phoneVal,
+              phone_number: phoneVal,
               role: isOwner ? 'OWNER' : res.user.role,
               avatar: res.user.avatarUrl || cachedUser?.avatar,
             };
@@ -465,24 +470,36 @@ export default function App() {
   };
 
   const handleOpenBookingDetails = (bookingOrBike) => {
+    if (!bookingOrBike) return;
+
     let bike = null;
     let bData = null;
 
-    if (bookingOrBike?.bikeId && typeof bookingOrBike.bikeId === 'object') {
-      bike = bookingOrBike.bikeId;
+    if (bookingOrBike.bookingCode || bookingOrBike.booking_code || bookingOrBike.pricing || bookingOrBike.riderDetails) {
       bData = bookingOrBike;
-    } else if (bookingOrBike?.currentBookingId && typeof bookingOrBike.currentBookingId === 'object') {
+      bike =
+        (bookingOrBike.bike && typeof bookingOrBike.bike === 'object' && bookingOrBike.bike) ||
+        (bookingOrBike.bikeId && typeof bookingOrBike.bikeId === 'object' && bookingOrBike.bikeId) ||
+        selectedBike;
+    } else if (bookingOrBike.currentBookingId && typeof bookingOrBike.currentBookingId === 'object') {
       bike = bookingOrBike;
-      bData = bookingOrBike.currentBookingId;
+      bData = {
+        ...bookingOrBike.currentBookingId,
+        bike: bookingOrBike,
+      };
     } else {
       bike = bookingOrBike;
-      bData = bookingOrBike?.currentBookingId || {
-        refId: bookingOrBike?.listingCode || 'RDE-BOOKED',
+      const bId =
+        typeof bookingOrBike.currentBookingId === 'string'
+          ? bookingOrBike.currentBookingId
+          : bookingOrBike.currentBookingId?._id;
+
+      bData = {
+        _id: bId,
+        bookingId: bId,
+        bookingCode: bookingOrBike.bookingCode || bookingOrBike.booking_code || bookingOrBike.listingCode,
+        booking_code: bookingOrBike.booking_code || bookingOrBike.bookingCode || bookingOrBike.listingCode,
         bike: bookingOrBike,
-        days: 2,
-        rentalFee: (bookingOrBike?.dailyPrice || 1500) * 2,
-        deposit: bookingOrBike?.securityDeposit || 3000,
-        total: (bookingOrBike?.dailyPrice || 1500) * 2 + (bookingOrBike?.securityDeposit || 3000),
       };
     }
 

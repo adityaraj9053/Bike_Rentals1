@@ -110,8 +110,13 @@ export const authAPI = {
       body: JSON.stringify(payload),
     }),
 
-  checkUser: (email) =>
-    request(`/auth/check-user?email=${encodeURIComponent(email)}`),
+  checkUser: (identifier) => {
+    const isEmail = typeof identifier === 'string' && identifier.includes('@');
+    const param = isEmail ? `email=${encodeURIComponent(identifier)}` : `userId=${encodeURIComponent(identifier)}`;
+    return request(`/auth/check-user?${param}`);
+  },
+
+  getUserById: (id) => request(`/auth/user/${encodeURIComponent(id)}`),
 
   getMe: () => request('/auth/me'),
 

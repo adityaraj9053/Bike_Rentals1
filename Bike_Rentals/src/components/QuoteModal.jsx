@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,11 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { X, Compass, Share2, ShieldCheck, User, Phone, Mail, FileCheck } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
+import { bookingsAPI, authAPI, authStorage } from '../services/api';
 
 export default function QuoteModal({
   visible,
@@ -22,18 +24,162 @@ export default function QuoteModal({
   isOwner = false,
 }) {
   const activeData = data || bookingData;
+
+  const [liveBooking, setLiveBooking] = useState(null);
+  const [liveUser, setLiveUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setLiveBooking(null);
+      setLiveUser(null);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function fetchDetails() {
+      try {
+        setLoading(true);
+
+        const candidateBike =
+          bike ||
+          activeData?.bike ||
+          (typeof activeData?.bikeId === 'object' ? activeData.bikeId : null) ||
+          {};
+
+        let bookingLookupKey =
+          activeData?.booking_code ||
+          activeData?.bookingCode ||
+          (activeData?.refId && !activeData.refId.includes('BOOKED') ? activeData.refId : null) ||
+          activeData?._id ||
+          activeData?.bookingId ||
+          (typeof activeData?.currentBookingId === 'string' ? activeData.currentBookingId : activeData?.currentBookingId?._id) ||
+          candidateBike?.currentBookingId?.booking_code ||
+          candidateBike?.currentBookingId?.bookingCode ||
+          (typeof candidateBike?.currentBookingId === 'string' ? candidateBike.currentBookingId : candidateBike?.currentBookingId?._id);
+
+        let fetchedB = null;
+
+        // Try local storage cache if lookup key not directly given
+        if (!bookingLookupKey && typeof window !== 'undefined' && window.localStorage) {
+          try {
+            const cachedBookings = JSON.parse(window.localStorage.getItem('my_user_bookings') || '[]');
+            const bikeIdToMatch = candidateBike?._id || candidateBike?.id || candidateBike?.listingCode;
+            const match = cachedBookings.find((cb) => {
+              const cbBikeId = cb.bikeId?._id || cb.bikeId?.id || cb.bike?._id || cb.bike?.id || cb.bikeListingCode;
+              return bikeIdToMatch && cbBikeId && String(bikeIdToMatch) === String(cbBikeId);
+            });
+            if (match) {
+              bookingLookupKey = match.booking_code || match.bookingCode || match._id;
+              fetchedB = match;
+            }
+          } catch (e) {}
+        }
+
+        // Fetch from "booking" table via API
+        if (bookingLookupKey) {
+          try {
+            const res = await bookingsAPI.getById(bookingLookupKey);
+            if (res?.data && isMounted) {
+              fetchedB = res.data;
+            }
+          } catch (apiErr) {
+            console.log('[QuoteModal] Notice fetching booking from booking table:', apiErr.message);
+          }
+        }
+
+        if (fetchedB && isMounted) {
+          setLiveBooking(fetchedB);
+        }
+
+        // Fetch user details from "users" table
+        let targetUserId =
+          fetchedB?.renterId?._id ||
+          (typeof fetchedB?.renterId === 'string' ? fetchedB.renterId : null) ||
+          activeData?.renterId?._id ||
+          (typeof activeData?.renterId === 'string' ? activeData.renterId : null);
+
+        let targetEmail =
+          fetchedB?.renterId?.email ||
+          fetchedB?.riderDetails?.email ||
+          activeData?.riderEmail ||
+          activeData?.riderDetails?.email ||
+          activeData?.renterId?.email;
+
+        // If renterId in fetchedB is already populated from the "users" table with name/phone
+        if (
+          fetchedB?.renterId &&
+          typeof fetchedB.renterId === 'object' &&
+          (fetchedB.renterId.fullName || fetchedB.renterId.phoneNumber || fetchedB.renterId.phone)
+        ) {
+          if (isMounted) setLiveUser(fetchedB.renterId);
+        } else if (targetUserId) {
+          try {
+            const userRes = await authAPI.getUserById(targetUserId);
+            if (userRes?.user && isMounted) {
+              setLiveUser(userRes.user);
+            }
+          } catch (uErr) {
+            if (targetEmail) {
+              const checkRes = await authAPI.checkUser(targetEmail);
+              if (checkRes?.user && isMounted) setLiveUser(checkRes.user);
+            }
+          }
+        } else if (targetEmail) {
+          try {
+            const checkRes = await authAPI.checkUser(targetEmail);
+            if (checkRes?.user && isMounted) {
+              setLiveUser(checkRes.user);
+            }
+          } catch (uErr) {}
+        } else {
+          const cachedAuth = authStorage.getUser();
+          if (cachedAuth) {
+            try {
+              const meRes = await authAPI.getMe();
+              if (meRes?.user && isMounted) {
+                setLiveUser(meRes.user);
+              }
+            } catch (meErr) {
+              if (isMounted) setLiveUser(cachedAuth);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[QuoteModal] Error resolving booking/user details:', err.message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, data, bookingData, bike]);
+
   if (!activeData && !bike) return null;
 
   // Resolve target bike
   const targetBike =
+    (liveBooking?.bikeId && typeof liveBooking.bikeId === 'object' ? liveBooking.bikeId : null) ||
     bike ||
     activeData?.bike ||
     (typeof activeData?.bikeId === 'object' ? activeData.bikeId : null) ||
     {};
 
+  // 1. Fetch "booking_code" of top right corner from "booking" table
   const bookingRef =
-    activeData?.refId ||
+    liveBooking?.booking_code ||
+    liveBooking?.bookingCode ||
+    activeData?.booking_code ||
     activeData?.bookingCode ||
+    (activeData?.refId && !activeData.refId.includes('BOOKED') ? activeData.refId : null) ||
+    targetBike?.currentBookingId?.booking_code ||
+    targetBike?.currentBookingId?.bookingCode ||
     targetBike?.listingCode ||
     'RDE-891024';
 
@@ -43,37 +189,74 @@ export default function QuoteModal({
 
   const pickupDate =
     activeData?.pickupDate ||
+    (liveBooking?.pickupDatetime ? new Date(liveBooking.pickupDatetime).toLocaleDateString() : null) ||
     (activeData?.pickupDatetime ? new Date(activeData.pickupDatetime).toLocaleDateString() : 'Scheduled');
   const pickupTime = activeData?.pickupTime || '09:00 AM';
   const returnDate =
     activeData?.returnDate ||
+    (liveBooking?.returnDatetime ? new Date(liveBooking.returnDatetime).toLocaleDateString() : null) ||
     (activeData?.returnDatetime ? new Date(activeData.returnDatetime).toLocaleDateString() : 'Scheduled');
   const returnTime = activeData?.returnTime || '09:00 PM';
-  const days = activeData?.days || activeData?.durationDays || 1;
+  const days = liveBooking?.durationDays || activeData?.days || activeData?.durationDays || 1;
 
-  const dailyPrice = targetBike.pricePerDay || targetBike.dailyPrice || activeData?.pricing?.dailyRate || 1500;
-  const rentalFee = activeData?.rentalFee ?? activeData?.rentalCharge ?? activeData?.pricing?.rentalTotal ?? (dailyPrice * days);
-  const deposit = activeData?.deposit ?? targetBike.deposit ?? targetBike.securityDeposit ?? activeData?.pricing?.securityDeposit ?? 3000;
-  const deliveryFee = activeData?.deliveryFee ?? activeData?.pricing?.deliveryFee ?? 0;
-  const total = activeData?.total ?? activeData?.pricing?.totalPayable ?? (rentalFee + deposit + deliveryFee);
+  const dailyPrice = targetBike.pricePerDay || targetBike.dailyPrice || liveBooking?.pricing?.dailyRate || activeData?.pricing?.dailyRate || 1500;
+  const rentalFee = liveBooking?.pricing?.rentalTotal ?? activeData?.rentalFee ?? activeData?.rentalCharge ?? activeData?.pricing?.rentalTotal ?? (dailyPrice * days);
+  const deposit = liveBooking?.pricing?.securityDeposit ?? activeData?.deposit ?? targetBike.deposit ?? targetBike.securityDeposit ?? activeData?.pricing?.securityDeposit ?? 3000;
+  const deliveryFee = liveBooking?.pricing?.deliveryFee ?? activeData?.deliveryFee ?? activeData?.pricing?.deliveryFee ?? 0;
+  const total = liveBooking?.pricing?.totalPayable ?? activeData?.total ?? activeData?.pricing?.totalPayable ?? (rentalFee + deposit + deliveryFee);
 
-  // Rider / Renter info
+  // 2. Fetch name & email from "users" table
+  const cachedUser = authStorage.getUser();
   const riderName =
+    liveUser?.fullName ||
+    liveUser?.name ||
+    liveBooking?.renterId?.fullName ||
+    liveBooking?.renterId?.name ||
+    liveBooking?.riderDetails?.fullName ||
+    liveBooking?.riderDetails?.name ||
     activeData?.riderName ||
     activeData?.riderDetails?.fullName ||
     activeData?.renterId?.fullName ||
+    cachedUser?.name ||
+    cachedUser?.fullName ||
     'Registered Rider';
-  const riderPhone =
-    activeData?.riderPhone ||
-    activeData?.riderDetails?.phoneNumber ||
-    activeData?.renterId?.phoneNumber ||
-    '';
+
   const riderEmail =
+    liveUser?.email ||
+    liveBooking?.renterId?.email ||
+    liveBooking?.riderDetails?.email ||
     activeData?.riderEmail ||
     activeData?.riderDetails?.email ||
     activeData?.renterId?.email ||
+    cachedUser?.email ||
     '';
+
+  // 3. Phone number from "users" table & "booking" table
+  const riderPhone =
+    liveUser?.phoneNumber ||
+    liveUser?.phone ||
+    liveUser?.phone_number ||
+    liveBooking?.renterId?.phoneNumber ||
+    liveBooking?.renterId?.phone ||
+    liveBooking?.renterId?.phone_number ||
+    liveBooking?.phoneNumber ||
+    liveBooking?.phone ||
+    liveBooking?.phone_number ||
+    liveBooking?.riderDetails?.phoneNumber ||
+    liveBooking?.riderDetails?.phone ||
+    liveBooking?.riderDetails?.phone_number ||
+    activeData?.riderPhone ||
+    activeData?.riderDetails?.phoneNumber ||
+    activeData?.riderDetails?.phone ||
+    activeData?.renterId?.phoneNumber ||
+    activeData?.renterId?.phone ||
+    cachedUser?.phone ||
+    cachedUser?.phoneNumber ||
+    '';
+
   const drivingLicense =
+    liveUser?.drivingLicense?.dlNumber ||
+    liveBooking?.renterId?.drivingLicense?.dlNumber ||
     activeData?.renterId?.drivingLicense?.dlNumber ||
     activeData?.drivingLicense ||
     'Verified at Pickup';
@@ -137,7 +320,7 @@ export default function QuoteModal({
                   </View>
 
                   {/* Customer / Rider Details if viewing as owner or customer details available */}
-                  {(isOwner || riderName !== 'Registered Rider' || riderPhone) && (
+                  {(isOwner || riderName !== 'Registered Rider' || riderPhone || riderEmail) && (
                     <View style={styles.renterDetailCard}>
                       <View style={styles.renterDetailHeader}>
                         <User size={15} color="#0284C7" />

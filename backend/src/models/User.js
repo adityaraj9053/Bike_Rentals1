@@ -22,6 +22,14 @@ const UserSchema = new Schema({
     type: String,
     trim: true,
   },
+  phone: {
+    type: String,
+    trim: true,
+  },
+  phone_number: {
+    type: String,
+    trim: true,
+  },
   phoneCountryCode: {
     type: String,
     default: '+91',
@@ -53,6 +61,21 @@ const UserSchema = new Schema({
 }, {
   timestamps: true,
   versionKey: false,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+});
+
+UserSchema.virtual('name').get(function () {
+  return this.fullName;
+});
+
+UserSchema.pre('save', function () {
+  const p = this.phoneNumber || this.phone || this.phone_number;
+  if (p) {
+    this.phoneNumber = p;
+    this.phone = p;
+    this.phone_number = p;
+  }
 });
 
 export const UserModel = mongoose.models.User || mongoose.model('User', UserSchema);

@@ -302,11 +302,13 @@ export async function documentExistsInR2(key) {
  * @returns {Promise<string|null>} Found R2 key or null
  */
 export async function findBikeDocumentKey(bikeId, docType) {
-  if (!isR2Configured() || !bikeId || !docType) return null;
+  const cleanBikeId = (bikeId?._id ? String(bikeId._id) : String(bikeId || '')).trim();
+  const cleanDocType = (typeof docType === 'string' ? docType : String(docType || '')).toLowerCase().trim();
+  if (!isR2Configured() || !cleanBikeId || !cleanDocType) return null;
 
   try {
-    const normalizedType = VALID_BIKE_DOC_TYPES[docType.toLowerCase().trim()] || docType.toLowerCase().trim();
-    const prefix = `documents/bikes/${bikeId.trim()}/${normalizedType}/`;
+    const normalizedType = VALID_BIKE_DOC_TYPES[cleanDocType] || cleanDocType;
+    const prefix = `documents/bikes/${cleanBikeId}/${normalizedType}/`;
 
     const res = await r2Client.send(
       new ListObjectsV2Command({
@@ -323,7 +325,7 @@ export async function findBikeDocumentKey(bikeId, docType) {
     contents.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
     return contents[0].Key;
   } catch (err) {
-    console.warn(`[findBikeDocumentKey] Warning for ${bikeId}/${docType}:`, err.message);
+    console.warn(`[findBikeDocumentKey] Warning for ${cleanBikeId}/${cleanDocType}:`, err.message);
     return null;
   }
 }
@@ -335,11 +337,13 @@ export async function findBikeDocumentKey(bikeId, docType) {
  * @returns {Promise<string|null>} Found R2 key or null
  */
 export async function findUserDocumentKey(userId, docType) {
-  if (!isR2Configured() || !userId || !docType) return null;
+  const cleanUserId = (userId?._id ? String(userId._id) : String(userId || '')).trim();
+  const cleanDocType = (typeof docType === 'string' ? docType : String(docType || '')).toLowerCase().trim();
+  if (!isR2Configured() || !cleanUserId || !cleanDocType) return null;
 
   try {
-    const normalizedType = VALID_USER_DOC_TYPES[docType.toLowerCase().trim()] || docType.toLowerCase().trim();
-    const prefix = `documents/users/${userId.trim()}/${normalizedType}/`;
+    const normalizedType = VALID_USER_DOC_TYPES[cleanDocType] || cleanDocType;
+    const prefix = `documents/users/${cleanUserId}/${normalizedType}/`;
 
     const res = await r2Client.send(
       new ListObjectsV2Command({
@@ -355,7 +359,7 @@ export async function findUserDocumentKey(userId, docType) {
     contents.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
     return contents[0].Key;
   } catch (err) {
-    console.warn(`[findUserDocumentKey] Warning for ${userId}/${docType}:`, err.message);
+    console.warn(`[findUserDocumentKey] Warning for ${cleanUserId}/${cleanDocType}:`, err.message);
     return null;
   }
 }
@@ -384,12 +388,18 @@ export async function findDocumentKeyByFilename(rawFilename, bikeOrUserId = null
     const base = path.basename(cleanRaw, ext);
     const sanitizedBase = base.replace(/[^a-zA-Z0-9]/g, '_');
 
+    const cleanId = (bikeOrUserId?._id ? String(bikeOrUserId._id) : String(bikeOrUserId || '')).trim();
+    const cleanDocType = (typeof docType === 'string' ? docType : String(docType || '')).toLowerCase().trim();
+
     let prefix = 'documents/';
-    if (bikeOrUserId && docType) {
-      const normDoc = VALID_BIKE_DOC_TYPES[docType.toLowerCase()] || VALID_USER_DOC_TYPES[docType.toLowerCase()] || docType.toLowerCase();
-      prefix = `documents/bikes/${bikeOrUserId.trim()}/${normDoc}/`;
-    } else if (bikeOrUserId) {
-      prefix = `documents/bikes/${bikeOrUserId.trim()}/`;
+    const isUserDoc = Boolean(cleanDocType && VALID_USER_DOC_TYPES[cleanDocType]);
+    const scopeFolder = isUserDoc ? 'users' : 'bikes';
+
+    if (cleanId && cleanDocType) {
+      const normDoc = VALID_USER_DOC_TYPES[cleanDocType] || VALID_BIKE_DOC_TYPES[cleanDocType] || cleanDocType;
+      prefix = `documents/${scopeFolder}/${cleanId}/${normDoc}/`;
+    } else if (cleanId) {
+      prefix = `documents/${scopeFolder}/${cleanId}/`;
     }
 
     const res = await r2Client.send(
@@ -499,9 +509,13 @@ export async function resolveDocumentSignedUrl(
     }
   }
 
-  // 3. If we have bikeId and docType, search R2 directly
+  // 3. If we have bikeId (or userId) and docType, search R2 directly
   if (bikeId && docType) {
-    const foundKey = await findBikeDocumentKey(bikeId, docType);
+    const cleanDoc = (typeof docType === 'string' ? docType : String(docType || '')).toLowerCase().trim();
+    const isUserDoc = Boolean(VALID_USER_DOC_TYPES[cleanDoc]);
+    const foundKey = isUserDoc
+      ? await findUserDocumentKey(bikeId, docType)
+      : await findBikeDocumentKey(bikeId, docType);
     if (foundKey) {
       try {
         return await getSignedDocumentUrl(foundKey, expiresInSeconds);

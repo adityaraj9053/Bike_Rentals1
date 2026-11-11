@@ -53,6 +53,8 @@ export async function createBooking(req, res) {
           email: cleanRiderEmail,
           fullName: cleanRiderName,
           phoneNumber: cleanRiderPhone,
+          phone: cleanRiderPhone,
+          phone_number: cleanRiderPhone,
           phoneCountryCode: data.countryCode || '+91',
           role: 'RENTER',
         });
@@ -62,6 +64,31 @@ export async function createBooking(req, res) {
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'User must be authenticated to create a booking.' });
+    }
+
+    // Persist and synchronize phone numbers & name in the users table
+    if (userId) {
+      try {
+        const existingUser = await UserModel.findById(userId);
+        if (existingUser) {
+          let updated = false;
+          if (cleanRiderPhone && (!existingUser.phoneNumber || existingUser.phoneNumber !== cleanRiderPhone)) {
+            existingUser.phoneNumber = cleanRiderPhone;
+            existingUser.phone = cleanRiderPhone;
+            existingUser.phone_number = cleanRiderPhone;
+            updated = true;
+          }
+          if (cleanRiderName && (!existingUser.fullName || existingUser.fullName === existingUser.email?.split('@')[0])) {
+            existingUser.fullName = cleanRiderName;
+            updated = true;
+          }
+          if (updated) {
+            await existingUser.save();
+          }
+        }
+      } catch (userSaveErr) {
+        console.warn('[Booking] Notice updating user phone in users table:', userSaveErr.message);
+      }
     }
 
     // Find requested bike ID
@@ -87,7 +114,7 @@ export async function createBooking(req, res) {
         currentBookedByUserId: userId,
         currentBookedByEmail: cleanRiderEmail,
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!lockedBike) {
@@ -111,8 +138,12 @@ export async function createBooking(req, res) {
 
     const newBooking = await BookingModel.create({
       bookingCode,
+      booking_code: bookingCode,
       bikeId: lockedBike._id,
       renterId: userId,
+      phoneNumber: cleanRiderPhone,
+      phone: cleanRiderPhone,
+      phone_number: cleanRiderPhone,
       pickupDatetime,
       returnDatetime,
       durationDays,
@@ -120,8 +151,11 @@ export async function createBooking(req, res) {
       deliveryAddress: data.deliveryAddress || '',
       riderDetails: {
         fullName: cleanRiderName,
+        name: cleanRiderName,
         email: cleanRiderEmail,
         phoneNumber: cleanRiderPhone,
+        phone: cleanRiderPhone,
+        phone_number: cleanRiderPhone,
         dateOfBirth: data.riderDob ? new Date(data.riderDob) : undefined,
         documents: data.riderDocuments || undefined,
       },
@@ -159,14 +193,19 @@ export async function createBooking(req, res) {
     // Populate bikeId so the frontend immediately receives full motorcycle data
     const populatedBooking = await BookingModel.findById(newBooking._id)
       .populate('bikeId')
-      .populate('renterId', 'fullName email phoneNumber drivingLicense')
+      .populate('renterId', 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense')
       .lean();
+
+    if (populatedBooking) {
+      populatedBooking.booking_code = populatedBooking.booking_code || populatedBooking.bookingCode;
+    }
 
     return res.status(201).json({
       success: true,
       message: 'Booking reserved and confirmed successfully.',
       booking: populatedBooking || newBooking,
       refId: bookingCode,
+      booking_code: bookingCode,
     });
   } catch (error) {
     console.error('[Booking createBooking Error]:', error);
@@ -181,19 +220,33 @@ export async function getBookingById(req, res) {
   try {
     const { id } = req.params;
     let query = {};
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      query._id = id;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query.$or = [{ _id: id }, { bookingCode: id }, { booking_code: id }];
     } else {
-      query.bookingCode = id;
+      query.$or = [{ bookingCode: id }, { booking_code: id }];
     }
 
     const booking = await BookingModel.findOne(query)
       .populate('bikeId')
-      .populate('renterId', 'fullName email phoneNumber drivingLicense')
+      .populate('renterId', 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense')
       .lean();
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    // Ensure booking_code & bookingCode are always present
+    booking.booking_code = booking.booking_code || booking.bookingCode;
+    booking.bookingCode = booking.bookingCode || booking.booking_code;
+
+    // Ensure phone numbers are populated
+    if (booking.renterId && typeof booking.renterId === 'object') {
+      const p = booking.renterId.phoneNumber || booking.renterId.phone || booking.renterId.phone_number;
+      if (p) {
+        booking.renterId.phoneNumber = p;
+        booking.renterId.phone = p;
+        booking.renterId.phone_number = p;
+      }
     }
 
     return res.status(200).json({ success: true, data: booking });
@@ -261,11 +314,17 @@ export async function getAllBookings(req, res) {
 
     const bookings = await BookingModel.find(filter)
       .populate('bikeId')
-      .populate('renterId', 'fullName email phoneNumber drivingLicense')
+      .populate('renterId', 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense')
       .sort({ createdAt: -1 })
       .lean();
 
-    return res.status(200).json({ success: true, count: bookings.length, data: bookings });
+    const formatted = bookings.map((b) => ({
+      ...b,
+      booking_code: b.booking_code || b.bookingCode,
+      bookingCode: b.bookingCode || b.booking_code,
+    }));
+
+    return res.status(200).json({ success: true, count: formatted.length, data: formatted });
   } catch (error) {
     console.error('[Booking getAllBookings Error]:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch bookings.' });
@@ -283,7 +342,7 @@ export async function updateBookingStatus(req, res) {
     const booking = await BookingModel.findByIdAndUpdate(
       id,
       { bookingStatus: status, ...(remarks ? { remarks } : {}) },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!booking) {
@@ -392,7 +451,7 @@ export async function getOwnerDashboardBookings(req, res) {
         const rawUserDocs = b.riderDocuments || b.riderDetails?.documents || {};
         const aadhaarDoc = rawUserDocs.aadhaar;
         const dlDoc = rawUserDocs.drivingLicence;
-        const renterId = b.renterId?._id || b.renterId;
+        const renterId = b.renterId?._id ? String(b.renterId._id) : String(b.renterId || '');
 
         const resolvedAadhaar = aadhaarDoc ? {
           ...aadhaarDoc,
@@ -511,7 +570,7 @@ export async function getUserBookings(req, res) {
 
     const bookings = await BookingModel.find({ $or: conditions })
       .populate('bikeId')
-      .populate('renterId', 'fullName email phoneNumber drivingLicense')
+      .populate('renterId', 'fullName name email phoneNumber phone phone_number phoneCountryCode drivingLicense')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -556,6 +615,8 @@ export async function getUserBookings(req, res) {
 
         return {
           ...booking,
+          booking_code: booking.booking_code || booking.bookingCode,
+          bookingCode: booking.bookingCode || booking.booking_code,
           isExpired: false,
           documentsDeleted: false,
           bikeDocuments: resolvedDocs,

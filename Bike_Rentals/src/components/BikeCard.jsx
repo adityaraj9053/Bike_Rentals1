@@ -74,7 +74,21 @@ export default function BikeCard({
     return (
       <TouchableOpacity
         style={[styles.card, styles.cardBookedDark, SHADOWS.card, compact && styles.cardCompact, style]}
-        onPress={() => onOpenBookingDetails && onOpenBookingDetails(bike.currentBookingId || bike)}
+        onPress={() => {
+          if (onOpenBookingDetails) {
+            const bObj = typeof bike.currentBookingId === 'object' ? bike.currentBookingId : null;
+            const bIdStr = typeof bike.currentBookingId === 'string' ? bike.currentBookingId : bObj?._id;
+            onOpenBookingDetails({
+              ...(bObj || {}),
+              _id: bIdStr,
+              bookingId: bIdStr,
+              bookingCode: bObj?.bookingCode || bObj?.booking_code,
+              booking_code: bObj?.booking_code || bObj?.bookingCode,
+              bike: bike,
+              bikeId: bike,
+            });
+          }
+        }}
         activeOpacity={0.85}
       >
         <View style={[styles.imageContainer, compact && styles.imageContainerCompact]}>
@@ -169,7 +183,21 @@ export default function BikeCard({
           {/* Action button for Owner to view customer & booking timeline */}
           <TouchableOpacity
             style={styles.viewRenterBtn}
-            onPress={() => onOpenBookingDetails && onOpenBookingDetails(bike.currentBookingId || bike)}
+            onPress={() => {
+              if (onOpenBookingDetails) {
+                const bObj = typeof bike.currentBookingId === 'object' ? bike.currentBookingId : null;
+                const bIdStr = typeof bike.currentBookingId === 'string' ? bike.currentBookingId : bObj?._id;
+                onOpenBookingDetails({
+                  ...(bObj || {}),
+                  _id: bIdStr,
+                  bookingId: bIdStr,
+                  bookingCode: bObj?.bookingCode || bObj?.booking_code,
+                  booking_code: bObj?.booking_code || bObj?.bookingCode,
+                  bike: bike,
+                  bikeId: bike,
+                });
+              }
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.viewRenterBtnText}>View Customer & Booking Details</Text>

@@ -100,6 +100,12 @@ export async function updateBusinessSettings(req, res) {
 export async function createOwnerBike(req, res) {
   try {
     const data = req.body;
+    const regNo = (data.registrationNumber || `MH-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase().trim();
+    const listingCode = `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const businessSettings = await BusinessSettingModel.findOne().lean().catch(() => null);
+    const pickupAddress = data.pickupAddress || businessSettings?.hubAddress || '123 Rider Avenue, Sector 5, Bandra West';
+    const pickupTimings = data.pickupTimings || (businessSettings?.operatingHours ? `${businessSettings.operatingHours.openTime} - ${businessSettings.operatingHours.closeTime}` : '07:00 AM - 09:00 PM');
 
     const sanitizeImg = (val, fallback) => {
       if (typeof val === 'string' && val.trim() && !val.trim().startsWith('blob:')) {
@@ -124,8 +130,6 @@ export async function createOwnerBike(req, res) {
     const galleryList = [frontImg, rearImg, leftImg, rightImg].filter(Boolean);
 
     if (mongoose.connection.readyState !== 1) {
-      const regNo = (data.registrationNumber || `MH-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase().trim();
-      const listingCode = `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
       return res.status(201).json({
         success: true,
         message: 'New motorcycle added to fleet successfully.',
