@@ -334,7 +334,7 @@ export async function openDocumentHandler(req, res) {
               <h2>Document Not Found</h2>
               <div class="badge">${cleanKey}</div>
               <p>The requested document could not be located in the secure Cloudflare R2 storage vault.</p>
-              <a href="http://localhost:8081" class="btn">Return to The Road Eagle</a>
+              <a href="${process.env.CLIENT_ORIGIN?.split(',')[0] || 'https://bikeagle.vercel.app'}" class="btn">Return to The Road Eagle</a>
             </div>
           </body>
         </html>

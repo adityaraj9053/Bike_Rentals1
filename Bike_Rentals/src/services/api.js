@@ -1,17 +1,47 @@
 import { Platform } from 'react-native';
 
-// Dynamic API Base URL detection
-export const API_BASE_URL = (() => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+// Resolve the backend URL using import.meta.env.VITE_BACKEND_URL with local development fallbacks
+const getRawBackendUrl = () => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_BACKEND_URL) {
+      return import.meta.env.VITE_BACKEND_URL;
+    }
+  } catch (e) {}
+
+  if (typeof process !== 'undefined' && process?.env) {
+    if (process.env.VITE_BACKEND_URL) return process.env.VITE_BACKEND_URL;
+    if (process.env.EXPO_PUBLIC_BACKEND_URL) return process.env.EXPO_PUBLIC_BACKEND_URL;
+    if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   }
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
-    return `http://${window.location.hostname}:5000/api/v1`;
-  }
+
+  return '';
+};
+
+// Default fallback URL for local development
+const getDefaultLocalUrl = () => {
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:5000/api/v1'; // Android emulator localhost alias
+    return 'http://10.0.2.2:5000';
   }
-  return 'http://localhost:5000/api/v1';
+  return 'http://localhost:5000';
+};
+
+// Root Backend URL (e.g., https://bike-rentals1.onrender.com or http://localhost:5000)
+export const BACKEND_URL = (() => {
+  const envUrl = getRawBackendUrl();
+  const raw = (envUrl || getDefaultLocalUrl()).trim();
+  // Strip trailing slashes
+  return raw.replace(/\/+$/, '');
+})();
+
+// API Base URL (always pointing to the /api/v1 prefix, avoiding double slashes)
+export const API_BASE_URL = (() => {
+  if (BACKEND_URL.endsWith('/api/v1')) {
+    return BACKEND_URL;
+  }
+  if (BACKEND_URL.endsWith('/api')) {
+    return `${BACKEND_URL}/v1`;
+  }
+  return `${BACKEND_URL}/api/v1`;
 })();
 
 let inMemoryToken = null;
@@ -62,7 +92,10 @@ export const authStorage = {
  * Core HTTP Request Wrapper
  */
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  // Guarantee clean joining of base URL and endpoint without double slashes
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const cleanBase = API_BASE_URL.replace(/\/+$/, '');
+  const url = `${cleanBase}${cleanEndpoint}`;
   const token = authStorage.getToken();
 
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -343,11 +376,12 @@ export const documentsAPI = {
     if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://') || keyOrUrl.startsWith('blob:')) {
       return keyOrUrl;
     }
-    const backendBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-    return `${backendBase}/api/documents/open?key=${encodeURIComponent(keyOrUrl)}`;
+    const backendBase = BACKEND_URL.replace(/\/api(\/v1)?\/?$/, '');
+    const cleanKey = keyOrUrl.replace(/^\/+/, '');
+    return `${backendBase}/api/documents/open?key=${encodeURIComponent(cleanKey)}`;
   },
   getFileByBikeUrl: (bikeId, docType) => {
-    const backendBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+    const backendBase = BACKEND_URL.replace(/\/api(\/v1)?\/?$/, '');
     return `${backendBase}/api/documents/file/${encodeURIComponent(bikeId)}/${encodeURIComponent(docType)}`;
   },
 };

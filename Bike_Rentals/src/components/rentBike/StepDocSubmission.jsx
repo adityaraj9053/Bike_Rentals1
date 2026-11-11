@@ -231,11 +231,11 @@ export default function StepDocSubmission({
             </View>
           </View>
 
-          {data.documents?.rc && (
-            <View style={styles.statusBadgePending}>
-              <Text style={styles.statusBadgeText}>Pending Verification</Text>
-            </View>
-          )}
+          {/* {data.documents?.rc && (
+            // <View style={styles.statusBadgePending}>
+            //   <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            // </View>
+          )} */}
         </View>
 
         {data.documents?.rc ? (
@@ -366,11 +366,11 @@ export default function StepDocSubmission({
             </View>
           </View>
 
-          {data.documents?.insurance && (
-            <View style={styles.statusBadgePending}>
-              <Text style={styles.statusBadgeText}>Pending Verification</Text>
-            </View>
-          )}
+          {/* {data.documents?.insurance && (
+            // <View style={styles.statusBadgePending}>
+            //   <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            // </View>
+          )} */}
         </View>
 
         {data.documents?.insurance ? (
@@ -549,11 +549,11 @@ export default function StepDocSubmission({
             </View>
           </View>
 
-          {data.documents?.puc && (
-            <View style={styles.statusBadgePending}>
-              <Text style={styles.statusBadgeText}>Pending Verification</Text>
-            </View>
-          )}
+          {/* {data.documents?.puc && (
+            // <View style={styles.statusBadgePending}>
+            //   <Text style={styles.statusBadgeText}>Pending Verification</Text>
+            // </View>
+          )} */}
         </View>
 
         {data.documents?.puc ? (
