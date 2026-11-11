@@ -5,13 +5,28 @@ const PRODUCTION_BACKEND_URL = 'https://bike-rentals1.onrender.com';
 
 // Dynamic backend URL resolution supporting Expo, Vite, Vercel, and local dev
 const resolveBackendUrl = () => {
-  // 1. Direct Expo public environment variables (statically inlined by Metro bundler at build time)
+  // 1. Web runtime environment detection: If running in browser on localhost or loopback,
+  // always connect to the local backend server (http://localhost:5000)
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname || '';
+    const isLocalhost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local');
+
+    if (isLocalhost) {
+      return process.env.EXPO_PUBLIC_LOCAL_BACKEND_URL || 'http://localhost:5000';
+    }
+  }
+
+  // 2. Direct Expo public environment variables (statically inlined by Metro bundler at build time)
   const expoBackend = process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL;
   if (expoBackend && typeof expoBackend === 'string' && expoBackend.trim().length > 0) {
     return expoBackend.trim();
   }
 
-  // 2. Direct Vite / Metro environment variables (if inlined by bundler)
+  // 3. Direct Vite / Metro environment variables (if inlined by bundler)
   try {
     const viteEnv =
       (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_BACKEND_URL) ||
@@ -21,27 +36,17 @@ const resolveBackendUrl = () => {
     }
   } catch (e) {}
 
-  // 3. Web runtime environment detection: If running in production (e.g., bikeagle.vercel.app or any remote host),
-  // NEVER attempt to connect to localhost:5000 — always use the deployed Render backend.
+  // 4. Remote web production fallback
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname || '';
-    const isLocalhost =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '0.0.0.0' ||
-      hostname.endsWith('.local');
-
-    if (!isLocalhost && hostname.length > 0) {
-      return PRODUCTION_BACKEND_URL;
-    }
+    return PRODUCTION_BACKEND_URL;
   }
 
-  // 4. Fallback for Android emulator
+  // 5. Fallback for Android emulator
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:5000';
   }
 
-  // 5. Fallback for local web development
+  // 6. Fallback for local web development
   return 'http://localhost:5000';
 };
 
@@ -124,11 +129,17 @@ async function request(endpoint, options = {}) {
     ...(options.headers || {}),
   };
 
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutMs = options.timeout || 8000;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
   try {
     const res = await fetch(url, {
       ...options,
       headers,
+      signal: controller ? controller.signal : undefined,
     });
+    if (timeoutId) clearTimeout(timeoutId);
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -136,6 +147,7 @@ async function request(endpoint, options = {}) {
     }
     return data;
   } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
     console.warn(`[API] Error on ${options.method || 'GET'} ${endpoint}:`, error.message);
     throw error;
   }

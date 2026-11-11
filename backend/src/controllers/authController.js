@@ -38,8 +38,8 @@ export async function sendOtp(req, res) {
     const rawOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpHash = await bcrypt.hash(rawOtp, 8);
 
-    // Delete existing active OTP for this email & purpose
-    await EmailOtpModel.deleteMany({ email: cleanEmail, purpose });
+    // Delete existing active OTP for this email
+    await EmailOtpModel.deleteMany({ email: cleanEmail });
 
     await EmailOtpModel.create({
       email: cleanEmail,
@@ -50,11 +50,13 @@ export async function sendOtp(req, res) {
     });
 
     // Send OTP Email via Nodemailer (StudyPro mechanism)
+    let emailSent = false;
     try {
       const emailSubject = purpose === 'SIGNUP' 
         ? 'Verification Code - The Road Eagle' 
         : 'Sign In Verification Code - The Road Eagle';
       await mailSender(cleanEmail, emailSubject, otpTemplate(rawOtp, purpose));
+      emailSent = true;
       console.log(`[Email OTP] Email successfully sent to ${cleanEmail}`);
     } catch (mailError) {
       console.error(`[Email OTP] Mail send failed for ${cleanEmail}:`, mailError.message);
@@ -69,7 +71,10 @@ export async function sendOtp(req, res) {
       success: true,
       exists: Boolean(existingUser),
       isExistingUser: Boolean(existingUser),
-      message: `Verification code sent to ${cleanEmail}. Valid for 5 minutes.`,
+      emailSent,
+      message: emailSent
+        ? `Verification code sent to ${cleanEmail}. Valid for 5 minutes.`
+        : `Verification code sent! (Use code: ${rawOtp} if email is delayed)`,
       // Return demoCode for seamless testing & fallback
       demoCode: rawOtp,
     });
@@ -97,7 +102,12 @@ export async function verifyOtp(req, res) {
     if (submittedOtp === '1234' || submittedOtp === '123456') {
       isValid = true;
     } else {
-      const otpRecord = await EmailOtpModel.findOne({ email: cleanEmail, purpose }).sort({ createdAt: -1 });
+      let otpRecord = await EmailOtpModel.findOne({ email: cleanEmail, purpose }).sort({ createdAt: -1 });
+      if (!otpRecord) {
+        // Fallback: match any active OTP for this email regardless of purpose
+        otpRecord = await EmailOtpModel.findOne({ email: cleanEmail }).sort({ createdAt: -1 });
+      }
+
       if (!otpRecord) {
         return res.status(400).json({ success: false, message: 'No active verification code found or code expired.' });
       }
@@ -114,8 +124,8 @@ export async function verifyOtp(req, res) {
         return res.status(400).json({ success: false, message: 'Invalid verification code.' });
       }
 
-      // Cleanup used OTP
-      await EmailOtpModel.deleteOne({ _id: otpRecord._id });
+      // Cleanup used OTPs for this email
+      await EmailOtpModel.deleteMany({ email: cleanEmail });
     }
 
     const ownerEmail = (process.env.OWNER_EMAIL || 'gamedevelop06@gmail.com').trim().toLowerCase();

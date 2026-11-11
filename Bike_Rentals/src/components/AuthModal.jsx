@@ -137,6 +137,7 @@ export default function AuthModal({
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // OTP Resend Countdown Timer
   useEffect(() => {
@@ -318,6 +319,7 @@ export default function AuthModal({
     setErrorMsg('');
     setInfoMsg('');
     setIsGoogleLoading(false);
+    setIsSubmitting(false);
     setActiveTab('signin');
   };
 
@@ -328,6 +330,7 @@ export default function AuthModal({
     setResendTimer(0);
     setErrorMsg('');
     setInfoMsg('');
+    setIsSubmitting(false);
   };
 
   const userExists = Boolean(user);
@@ -359,7 +362,10 @@ export default function AuthModal({
   };
 
   const handleSendCode = async () => {
+    if (isSubmitting) return;
+
     setErrorMsg('');
+    setInfoMsg('');
     setOtp('');
 
     // Strict Email validation (@ and .domain)
@@ -371,20 +377,8 @@ export default function AuthModal({
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Check if user data already exists in database
-    let userExistsInDb = false;
-    try {
-      const checkRes = await authAPI.checkUser(cleanEmail);
-      if (checkRes?.exists) {
-        userExistsInDb = true;
-      }
-    } catch (e) {}
-
-    // If user's data is already in database, DO NOT ask for date of birth!
-    if (userExistsInDb && activeTab === 'signup') {
-      setActiveTab('signin');
-      setInfoMsg(isHindi ? 'आपका खाता पहले से डेटाबेस में है। साइन इन पर ले जाया जा रहा है...' : 'Account found in database! Switched to Sign In...');
-    } else if (activeTab === 'signup') {
+    // Signup-specific upfront validations
+    if (activeTab === 'signup') {
       if (!name.trim()) {
         setErrorMsg(t('auth.validNameErr', 'Please enter your full name.'));
         return;
@@ -414,6 +408,25 @@ export default function AuthModal({
       }
     }
 
+    setIsSubmitting(true);
+
+    // Check if user data already exists in database
+    let userExistsInDb = false;
+    try {
+      const checkRes = await authAPI.checkUser(cleanEmail);
+      if (checkRes?.exists) {
+        userExistsInDb = true;
+      }
+    } catch (e) {
+      console.warn('[AuthModal] checkUser notice:', e.message);
+    }
+
+    // If user's data is already in database, inform and switch mode
+    if (userExistsInDb && activeTab === 'signup') {
+      setActiveTab('signin');
+      setInfoMsg(isHindi ? 'आपका खाता पहले से डेटाबेस में है। साइन इन पर ले जाया जा रहा है...' : 'Account found in database! Switched to Sign In...');
+    }
+
     try {
       const res = await authAPI.sendOtp(cleanEmail, userExistsInDb ? 'LOGIN' : (activeTab === 'signup' ? 'SIGNUP' : 'LOGIN'));
       setOtpSent(true);
@@ -431,7 +444,8 @@ export default function AuthModal({
           : `Verification code sent to ${cleanEmail}!${codeNotice}`
       );
     } catch (err) {
-      // Fallback in case of network issue
+      console.error('[AuthModal] OTP send error, falling back to instant verification screen:', err);
+      // Fallback: ALWAYS transition to OTP screen so the user is never stuck
       setOtpSent(true);
       setDemoCode('123456');
       setResendTimer(30);
@@ -440,10 +454,13 @@ export default function AuthModal({
           ? `सत्यापन कोड ${cleanEmail} पर भेजा गया! (डेमो कोड: 123456)`
           : `Verification code sent to ${cleanEmail}! (Demo Code: 123456)`
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleVerifyAndSubmit = async () => {
+    if (isSubmitting) return;
     setErrorMsg('');
     const submittedOtp = (otp || '').trim();
 
@@ -452,6 +469,7 @@ export default function AuthModal({
       return;
     }
 
+    setIsSubmitting(true);
     const formattedDob = dobDay && dobMonth && dobYear ? `${dobYear}-${dobMonth}-${dobDay}` : '';
 
     try {
@@ -513,6 +531,8 @@ export default function AuthModal({
       } else {
         setErrorMsg(err.message || t('auth.invalidOtpErr', 'Invalid OTP code! Please try again.'));
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1056,7 +1076,46 @@ export default function AuthModal({
                               </View>
                             </TouchableOpacity>
 
-                            
+                            {/* Quick Select Boxes for Day, Month, Year */}
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                              {/* Day Selector Box */}
+                              <TouchableOpacity
+                                style={[styles.dobSelectBox, activeDobPicker === 'day' && styles.dobSelectBoxActive]}
+                                onPress={() => setActiveDobPicker(activeDobPicker === 'day' ? null : 'day')}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={dobDay ? styles.dobValueText : styles.dobPlaceholderText}>
+                                  {dobDay ? `${dobDay} ${isHindi ? 'तारीख' : 'Day'}` : (isHindi ? 'दिन' : 'Day')}
+                                </Text>
+                                <ChevronDown size={14} color="#94A3B8" />
+                              </TouchableOpacity>
+
+                              {/* Month Selector Box */}
+                              <TouchableOpacity
+                                style={[styles.dobSelectBox, activeDobPicker === 'month' && styles.dobSelectBoxActive]}
+                                onPress={() => setActiveDobPicker(activeDobPicker === 'month' ? null : 'month')}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={dobMonth ? styles.dobValueText : styles.dobPlaceholderText}>
+                                  {dobMonth
+                                    ? (monthsList.find((m) => m.value === dobMonth)?.label?.split(' ')[0] || dobMonth)
+                                    : (isHindi ? 'माह' : 'Month')}
+                                </Text>
+                                <ChevronDown size={14} color="#94A3B8" />
+                              </TouchableOpacity>
+
+                              {/* Year Selector Box */}
+                              <TouchableOpacity
+                                style={[styles.dobSelectBox, activeDobPicker === 'year' && styles.dobSelectBoxActive]}
+                                onPress={() => setActiveDobPicker(activeDobPicker === 'year' ? null : 'year')}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={dobYear ? styles.dobValueText : styles.dobPlaceholderText}>
+                                  {dobYear || (isHindi ? 'वर्ष (18+)' : 'Year (18+)')}
+                                </Text>
+                                <ChevronDown size={14} color="#94A3B8" />
+                              </TouchableOpacity>
+                            </View>
 
                             {/* Expanded Selection List inside Modal */}
                             {activeDobPicker === 'day' && (
@@ -1132,16 +1191,23 @@ export default function AuthModal({
                         )}
 
                         <TouchableOpacity
-                          style={styles.submitBtn}
+                          style={[styles.submitBtn, isSubmitting && { opacity: 0.8 }]}
                           onPress={handleSendCode}
+                          disabled={isSubmitting}
                           activeOpacity={0.85}
                         >
-                          <Text style={styles.submitBtnText}>
-                            {activeTab === 'signup'
-                              ? t('auth.verifyAgeSendOtpBtn', 'Verify Age & Send OTP')
-                              : t('auth.sendOtpBtn', 'Send Email OTP')}
-                          </Text>
-                          <ArrowRight size={16} color="#FFFFFF" />
+                          {isSubmitting ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <>
+                              <Text style={styles.submitBtnText}>
+                                {activeTab === 'signup'
+                                  ? t('auth.verifyAgeSendOtpBtn', 'Verify Age & Send OTP')
+                                  : t('auth.sendOtpBtn', 'Send Email OTP')}
+                              </Text>
+                              <ArrowRight size={16} color="#FFFFFF" />
+                            </>
+                          )}
                         </TouchableOpacity>
 
                         <View style={styles.dividerRow}>
@@ -1221,14 +1287,21 @@ export default function AuthModal({
                         </View>
 
                         <TouchableOpacity
-                          style={styles.submitBtn}
+                          style={[styles.submitBtn, isSubmitting && { opacity: 0.8 }]}
                           onPress={handleVerifyAndSubmit}
+                          disabled={isSubmitting}
                           activeOpacity={0.85}
                         >
-                          <Text style={styles.submitBtnText}>
-                            {t('auth.verifyOtpBtn', 'Verify OTP & Continue')}
-                          </Text>
-                          <ArrowRight size={16} color="#FFFFFF" />
+                          {isSubmitting ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <>
+                              <Text style={styles.submitBtnText}>
+                                {t('auth.verifyOtpBtn', 'Verify OTP & Continue')}
+                              </Text>
+                              <ArrowRight size={16} color="#FFFFFF" />
+                            </>
+                          )}
                         </TouchableOpacity>
                       </View>
                     )}
