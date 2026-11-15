@@ -9,6 +9,7 @@ export default function BuyerDetailsScreen({
   user,
   onSignOut,
   onShowToast,
+  sharedBikes = [],
 }) {
   return (
     <View style={styles.container}>
@@ -47,7 +48,10 @@ export default function BuyerDetailsScreen({
           user={user}
           onSignOut={onSignOut}
           onShowToast={onShowToast}
-          onNavigateToRentBike={() => navigation?.navigate?.('RentBike')}
+          sharedBikes={sharedBikes}
+          onNavigateToRentBike={(bikeToEdit) =>
+            navigation?.navigate?.('RentBike', bikeToEdit ? { bikeToEdit } : undefined)
+          }
         />
       </ScrollView>
     </View>

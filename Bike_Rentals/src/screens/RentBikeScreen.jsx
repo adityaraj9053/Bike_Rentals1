@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   Dimensions,
+  Image,
 } from 'react-native';
 import {
   User,
@@ -24,6 +25,7 @@ import {
   X,
   HelpCircle,
   Sparkles,
+  PlusCircle,
 } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -169,15 +171,148 @@ const SAMPLE_DEMO_DATA = {
   ],
 };
 
+const mapBikeToFormData = (bike, currentUser) => {
+  if (!bike) return null;
+  const imgs = bike.images || bike.photos || {};
+  const frontImg = imgs.front || bike.image || (bike.imageSource?.uri) || null;
+  const rearImg = imgs.rear || imgs.back || null;
+  const leftImg = imgs.left || null;
+  const rightImg = imgs.right || null;
+  const thumbImg = imgs.thumbnail || frontImg;
+
+  const docs = bike.documents || {};
+  const normalizeDocObj = (doc, fallbackName) => {
+    if (!doc) return null;
+    if (typeof doc === 'string') {
+      const fileName = doc.split('/').pop()?.split('?')[0] || fallbackName;
+      return {
+        fileName,
+        fileSize: 'Verified Cloud File',
+        fileType: fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+        uploadedAt: 'Active on File',
+        fileUrl: doc,
+        previewUrl: doc,
+        signedUrl: doc,
+        status: 'Verified & Stored',
+      };
+    }
+    return {
+      fileName: doc.fileName || doc.name || fallbackName,
+      fileSize: doc.fileSize || 'Verified File',
+      fileType: doc.fileType || 'application/pdf',
+      uploadedAt: doc.uploadedAt || 'Active on File',
+      fileUrl: doc.fileUrl || doc.signedUrl || doc.url,
+      previewUrl: doc.previewUrl || doc.fileUrl || doc.signedUrl || doc.url,
+      signedUrl: doc.signedUrl || doc.fileUrl,
+      status: doc.status || 'Verified & Stored',
+      key: doc.key || null,
+    };
+  };
+
+  const rcDoc = normalizeDocObj(docs.rcSmartCardUrl || docs.rc, `${bike.registrationNumber || 'Vehicle'}_RC.pdf`);
+  const insuranceDoc = normalizeDocObj(docs.insurancePolicyUrl || docs.insurance, `${bike.registrationNumber || 'Vehicle'}_Insurance.pdf`);
+  const pucDoc = normalizeDocObj(docs.pucCertificateUrl || docs.puc, `${bike.registrationNumber || 'Vehicle'}_PUC.pdf`);
+
+  const formatIsoDate = (d) => {
+    if (!d) return '';
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return String(d);
+      return dt.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
+  return {
+    _id: bike._id || bike.id,
+    id: bike.id || bike._id,
+    listingCode: bike.listingCode || bike.id,
+    fullName: currentUser?.name || currentUser?.fullName || bike.registeredOwnerName || '',
+    phone: currentUser?.phone || currentUser?.phoneNumber || '',
+    countryCode: currentUser?.countryCode || '+91',
+    mobileVerified: true,
+    email: currentUser?.email || '',
+    emailVerified: true,
+    address: bike.pickupAddress || '',
+    city: '',
+    state: '',
+    pincode: '',
+    idDocument: null,
+
+    // Bike Info
+    brand: bike.brand || '',
+    model: bike.model || '',
+    manufacturingYear: String(bike.manufacturingYear || new Date().getFullYear()),
+    registrationNumber: bike.registrationNumber || '',
+    category: bike.category || '',
+    engineCapacity: String(bike.engineCapacity || bike.engineCapacityCc || bike.specs?.displacement?.replace(/[^0-9]/g, '') || ''),
+    fuelType: bike.fuelType || bike.specs?.fuelType || 'Petrol',
+    transmission: bike.transmission || bike.specs?.transmission || 'Manual',
+    colour: bike.colour || bike.color || '',
+    description: bike.description || bike.tagline || '',
+    images: {
+      front: frontImg,
+      rear: rearImg,
+      left: leftImg,
+      right: rightImg,
+      thumbnail: thumbImg,
+    },
+    photos: {
+      front: frontImg,
+      rear: rearImg,
+      left: leftImg,
+      right: rightImg,
+      thumbnail: thumbImg,
+    },
+
+    // Documents
+    documents: {
+      rc: rcDoc,
+      insurance: insuranceDoc,
+      puc: pucDoc,
+    },
+    insurancePolicyNumber: bike.insurancePolicyNumber || 'POL-' + (bike.registrationNumber ? bike.registrationNumber.replace(/\s+/g, '') : '9812401'),
+    insuranceExpiryDate: formatIsoDate(docs.insuranceExpiryDate) || bike.insuranceExpiryDate || '',
+    pucExpiryDate: formatIsoDate(docs.pucExpiryDate) || bike.pucExpiryDate || '',
+    chassisNumber: bike.chassisNumber || '',
+    engineNumber: bike.engineNumber || '',
+    registeredOwnerName: bike.registeredOwnerName || currentUser?.name || currentUser?.fullName || '',
+    ownershipType: bike.ownershipType || 'registered_owner',
+
+    // Rental
+    dailyPrice: Number(bike.dailyPrice || bike.pricePerDay || 1500),
+    securityDeposit: Number(bike.securityDeposit || bike.deposit || 3000),
+    minDuration: bike.minDuration || 1,
+    maxDuration: bike.maxDuration || 14,
+    availabilityPreset: bike.availabilityPreset || 'Next 30 Days',
+    availableFrom: bike.availableFrom || 'Immediate',
+    availableTo: bike.availableTo || '+30 Days',
+    pickupLocation: bike.pickupLocation || bike.pickupAddress || '',
+    pickupAddress: bike.pickupAddress || '',
+    pickupTimings: bike.pickupTimings || '07:00 AM - 09:00 PM',
+    deliveryAvailable: Boolean(bike.doorstepDeliveryAvailable || bike.deliveryAvailable),
+    rulesList: Array.isArray(bike.features) && bike.features.length > 0 ? bike.features : (bike.rulesList || []),
+  };
+};
+
 export default function RentBikeScreen({
   navigation,
+  route,
   user,
   onOpenAuth,
   onShowToast,
   onBikeSubmitted,
+  onBikeUpdated,
+  sharedBikes = [],
 }) {
   const { t, isHindi, toggleLanguage } = useLanguage();
   const [currentStep, setCurrentStep] = useState(0);
+
+  const incomingBikeToEdit = route?.params?.bikeToEdit || route?.params?.bike || null;
+  const [editingBike, setEditingBike] = useState(incomingBikeToEdit);
+  const isEditMode = Boolean(editingBike);
+  const [showSelectBikeModal, setShowSelectBikeModal] = useState(false);
 
   const STEPS = [
     { id: 0, title: t('rentBike.step1', 'Bike Info'), icon: Bike, short: 'Bike' },
@@ -185,45 +320,68 @@ export default function RentBikeScreen({
     { id: 2, title: t('rentBike.step3', 'Rental Rates'), icon: IndianRupee, short: 'Pricing' },
     { id: 3, title: t('rentBike.step4', 'Review & Publish'), icon: CheckCircle2, short: 'Review' },
   ];
-  const [formData, setFormData] = useState(() => ({
-    ...INITIAL_FORM_DATA,
-    fullName: user?.name || INITIAL_FORM_DATA.fullName,
-    email: user?.email || INITIAL_FORM_DATA.email,
-    emailVerified: user?.email ? true : INITIAL_FORM_DATA.emailVerified,
-    phone: user?.phone || INITIAL_FORM_DATA.phone,
-    countryCode: user?.countryCode || INITIAL_FORM_DATA.countryCode || '+91',
-    mobileVerified: user?.phone ? true : INITIAL_FORM_DATA.mobileVerified,
-    registeredOwnerName: user?.name || INITIAL_FORM_DATA.registeredOwnerName,
-  }));
+
+  const [formData, setFormData] = useState(() => {
+    if (incomingBikeToEdit) {
+      const mapped = mapBikeToFormData(incomingBikeToEdit, user);
+      if (mapped) return mapped;
+    }
+    return {
+      ...INITIAL_FORM_DATA,
+      fullName: user?.name || INITIAL_FORM_DATA.fullName,
+      email: user?.email || INITIAL_FORM_DATA.email,
+      emailVerified: user?.email ? true : INITIAL_FORM_DATA.emailVerified,
+      phone: user?.phone || INITIAL_FORM_DATA.phone,
+      countryCode: user?.countryCode || INITIAL_FORM_DATA.countryCode || '+91',
+      mobileVerified: user?.phone ? true : INITIAL_FORM_DATA.mobileVerified,
+      registeredOwnerName: user?.name || INITIAL_FORM_DATA.registeredOwnerName,
+    };
+  });
+
   const [stepErrors, setStepErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  // Synchronize when route params provide or change bikeToEdit
+  React.useEffect(() => {
+    if (incomingBikeToEdit) {
+      setEditingBike(incomingBikeToEdit);
+      const mapped = mapBikeToFormData(incomingBikeToEdit, user);
+      if (mapped) {
+        setFormData(mapped);
+        setCurrentStep(0);
+        setStepErrors({});
+      }
+    }
+  }, [incomingBikeToEdit?._id, incomingBikeToEdit?.id, incomingBikeToEdit?.registrationNumber]);
+
   // Load pre-saved business settings once (eliminates entering owner info on every bike)
   React.useEffect(() => {
-    ownerAPI
-      .getSettings()
-      .then((res) => {
-        if (res?.data) {
-          const s = res.data;
-          setFormData((prev) => ({
-            ...prev,
-            fullName: s.ownerFullName || prev.fullName,
-            phone: s.contactPhone || prev.phone,
-            email: s.contactEmail || prev.email,
-            pickupAddress: s.defaultPickupHub?.address || prev.pickupAddress,
-            pickupLocation: s.defaultPickupHub?.city || prev.pickupLocation,
-          }));
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (!isEditMode) {
+      ownerAPI
+        .getSettings()
+        .then((res) => {
+          if (res?.data) {
+            const s = res.data;
+            setFormData((prev) => ({
+              ...prev,
+              fullName: s.ownerFullName || prev.fullName,
+              phone: s.contactPhone || prev.phone,
+              email: s.contactEmail || prev.email,
+              pickupAddress: s.defaultPickupHub?.address || prev.pickupAddress,
+              pickupLocation: s.defaultPickupHub?.city || prev.pickupLocation,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isEditMode]);
 
   // Synchronize when authenticated user changes or logs in
   const userIdentifier = user?.id || user?._id || user?.email || null;
   React.useEffect(() => {
-    if (user) {
+    if (user && !isEditMode) {
       setFormData((prev) => ({
         ...prev,
         fullName: user.name || prev.fullName,
@@ -235,7 +393,41 @@ export default function RentBikeScreen({
         registeredOwnerName: user.name || prev.registeredOwnerName,
       }));
     }
-  }, [userIdentifier]);
+  }, [userIdentifier, isEditMode]);
+
+  const handleSelectBikeToEdit = (bike) => {
+    setEditingBike(bike);
+    const mapped = mapBikeToFormData(bike, user);
+    if (mapped) {
+      setFormData(mapped);
+      setCurrentStep(0);
+      setStepErrors({});
+    }
+    setShowSelectBikeModal(false);
+    if (onShowToast) {
+      onShowToast(`Loaded ${bike.brand} ${bike.model} (${bike.registrationNumber}) for editing.`);
+    }
+  };
+
+  const handleSwitchToCreateMode = () => {
+    setEditingBike(null);
+    setFormData({
+      ...INITIAL_FORM_DATA,
+      fullName: user?.name || INITIAL_FORM_DATA.fullName,
+      email: user?.email || INITIAL_FORM_DATA.email,
+      emailVerified: user?.email ? true : INITIAL_FORM_DATA.emailVerified,
+      phone: user?.phone || INITIAL_FORM_DATA.phone,
+      countryCode: user?.countryCode || INITIAL_FORM_DATA.countryCode || '+91',
+      mobileVerified: user?.phone ? true : INITIAL_FORM_DATA.mobileVerified,
+      registeredOwnerName: user?.name || INITIAL_FORM_DATA.registeredOwnerName,
+    });
+    setCurrentStep(0);
+    setStepErrors({});
+    setShowSelectBikeModal(false);
+    if (onShowToast) {
+      onShowToast('Switched to Add New Bike mode.');
+    }
+  };
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => {
@@ -358,6 +550,40 @@ export default function RentBikeScreen({
     }
   };
 
+  const handleGoToFleet = () => {
+    setSuccessModalData(null);
+    if (!navigation) return;
+
+    // 1. Primary path: Route to nested Motorbikes tab inside MainTabs (standard React Navigation pattern)
+    try {
+      navigation.navigate('MainTabs', {
+        screen: 'Motorbikes',
+        params: { initialCategory: 'all', timestamp: Date.now() },
+      });
+    } catch (e) {
+      console.warn('[RentBikeScreen] Navigation to MainTabs/Motorbikes failed:', e);
+    }
+
+    // 2. Direct navigate path (works when inside BottomTabNavigator)
+    try {
+      navigation.navigate('Motorbikes', { initialCategory: 'all', timestamp: Date.now() });
+    } catch (e) {
+      console.warn('[RentBikeScreen] Direct navigation to Motorbikes failed:', e);
+    }
+
+    // 3. Parent navigation fallback
+    try {
+      const parent = navigation.getParent?.();
+      if (parent?.navigate) {
+        parent.navigate('MainTabs', {
+          screen: 'Motorbikes',
+          params: { initialCategory: 'all', timestamp: Date.now() },
+        });
+        parent.navigate('Motorbikes', { initialCategory: 'all', timestamp: Date.now() });
+      }
+    } catch (e) {}
+  };
+
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
 
@@ -373,18 +599,6 @@ export default function RentBikeScreen({
         }
         return;
       }
-
-      console.log('[RentBikeScreen] Submitting motorcycle with verified photos:', formData.images);
-      const res = await ownerAPI.createBike(formData).catch(() => bikesAPI.createListing(formData));
-      setIsSubmitting(false);
-
-      const savedBike = res.data || {};
-      const submissionId = savedBike.listingCode || `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
-      const submissionDate = new Date().toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
 
       const resolveCategoryKey = (catStr) => {
         const c = (catStr || '').toLowerCase();
@@ -405,6 +619,116 @@ export default function RentBikeScreen({
         leftImg && { key: 'left', label: 'Left', source: { uri: leftImg }, url: leftImg },
         rightImg && { key: 'right', label: 'Right', source: { uri: rightImg }, url: rightImg },
       ].filter(Boolean);
+
+      // =========================================================================
+      // EDIT MODE: Update existing submitted bike in fleet
+      // =========================================================================
+      if (isEditMode) {
+        const bikeTargetId = formData._id || formData.id || editingBike?._id || editingBike?.id || editingBike?.listingCode;
+        console.log('[RentBikeScreen] Updating existing motorcycle in fleet:', bikeTargetId);
+
+        const updatePayload = {
+          ...formData,
+          name: (formData.name || `${formData.brand || ''} ${formData.model || ''}`).trim(),
+          brand: formData.brand,
+          model: formData.model,
+          manufacturingYear: Number(formData.manufacturingYear) || new Date().getFullYear(),
+          registrationNumber: formData.registrationNumber,
+          category: formData.category,
+          engineCapacity: formData.engineCapacity,
+          engineCapacityCc: Number(formData.engineCapacity) || 350,
+          fuelType: formData.fuelType,
+          transmission: formData.transmission,
+          color: formData.colour,
+          colour: formData.colour,
+          description: formData.description,
+          tagline: formData.description,
+          dailyPrice: Number(formData.dailyPrice),
+          pricePerDay: Number(formData.dailyPrice),
+          securityDeposit: Number(formData.securityDeposit),
+          deposit: Number(formData.securityDeposit),
+          images: {
+            front: frontImg,
+            rear: rearImg,
+            left: leftImg,
+            right: rightImg,
+            thumbnail: formData.images?.thumbnail || frontImg,
+          },
+          photos: {
+            front: frontImg,
+            rear: rearImg,
+            left: leftImg,
+            right: rightImg,
+            thumbnail: formData.images?.thumbnail || frontImg,
+          },
+          pickupAddress: formData.pickupAddress || formData.pickupLocation,
+          pickupTimings: formData.pickupTimings,
+          doorstepDeliveryAvailable: formData.deliveryAvailable,
+          features: formData.rulesList,
+          documents: formData.documents,
+        };
+
+        let updatedSavedBike = null;
+        try {
+          const res = await ownerAPI.updateBike(bikeTargetId, updatePayload).catch(() => bikesAPI.update(bikeTargetId, updatePayload));
+          if (res?.data) {
+            updatedSavedBike = res.data;
+          }
+        } catch (apiErr) {
+          console.warn('[RentBikeScreen] API update notice:', apiErr.message);
+        }
+        setIsSubmitting(false);
+
+        const updatedFleetBike = {
+          ...editingBike,
+          ...formData,
+          ...updatePayload,
+          ...(updatedSavedBike || {}),
+          id: bikeTargetId,
+          _id: bikeTargetId,
+          categoryKey: resolveCategoryKey(formData.category),
+          image: frontImg,
+          imageSource: { uri: frontImg },
+          gallery: galleryList,
+          gallerySources: galleryItems.map((g) => g.source),
+          galleryItems,
+          specs: {
+            displacement: `${formData.engineCapacity || 350} CC`,
+            transmission: formData.transmission || 'Manual',
+            fuelType: formData.fuelType || 'Petrol',
+          },
+          status: 'APPROVED',
+          statusBadge: 'AVAILABLE',
+          isBooked: false,
+        };
+
+        if (onBikeUpdated) {
+          onBikeUpdated(updatedFleetBike);
+        } else if (onBikeSubmitted) {
+          onBikeSubmitted(updatedFleetBike);
+        }
+
+        setSuccessModalData(updatedFleetBike);
+        if (onShowToast) {
+          onShowToast('Motorcycle details updated successfully!');
+        }
+        return;
+      }
+
+      // =========================================================================
+      // CREATE MODE: Add new motorcycle to fleet
+      // =========================================================================
+      console.log('[RentBikeScreen] Submitting motorcycle with verified photos:', formData.images);
+      const res = await ownerAPI.createBike(formData).catch(() => bikesAPI.createListing(formData));
+      setIsSubmitting(false);
+
+      const savedBike = res.data || {};
+      const submissionId = savedBike.listingCode || `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
+      const submissionDate = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
 
       const newFleetBike = {
         ...formData,
@@ -465,7 +789,7 @@ export default function RentBikeScreen({
         onShowToast('Motorcycle added to live fleet successfully!');
       }
     } catch (err) {
-      console.warn('[RentBikeScreen] Fleet addition error:', err.message);
+      console.warn('[RentBikeScreen] Submission notice:', err.message);
       setIsSubmitting(false);
 
       const resolveCategoryKey = (catStr) => {
@@ -476,7 +800,6 @@ export default function RentBikeScreen({
         return 'commuter';
       };
 
-      const submissionId = `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
       const frontImg = formData.images?.front || formData.images?.thumbnail || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800';
       const rearImg = formData.images?.rear;
       const leftImg = formData.images?.left;
@@ -489,6 +812,43 @@ export default function RentBikeScreen({
         rightImg && { key: 'right', label: 'Right', source: { uri: rightImg }, url: rightImg },
       ].filter(Boolean);
 
+      if (isEditMode) {
+        const bikeTargetId = formData._id || formData.id || editingBike?._id || editingBike?.id || editingBike?.listingCode;
+        const updatedFleetBike = {
+          ...editingBike,
+          ...formData,
+          id: bikeTargetId,
+          _id: bikeTargetId,
+          categoryKey: resolveCategoryKey(formData.category),
+          image: frontImg,
+          imageSource: { uri: frontImg },
+          gallery: galleryList,
+          gallerySources: galleryItems.map((g) => g.source),
+          galleryItems,
+          specs: {
+            displacement: `${formData.engineCapacity || 350} CC`,
+            transmission: formData.transmission || 'Manual',
+            fuelType: formData.fuelType || 'Petrol',
+          },
+          status: 'APPROVED',
+          statusBadge: 'AVAILABLE',
+          isBooked: false,
+        };
+
+        if (onBikeUpdated) {
+          onBikeUpdated(updatedFleetBike);
+        } else if (onBikeSubmitted) {
+          onBikeSubmitted(updatedFleetBike);
+        }
+
+        setSuccessModalData(updatedFleetBike);
+        if (onShowToast) {
+          onShowToast('Motorcycle details updated successfully!');
+        }
+        return;
+      }
+
+      const submissionId = `RDE-${Math.floor(100000 + Math.random() * 900000)}`;
       const newFleetBike = {
         ...formData,
         id: submissionId,
@@ -569,8 +929,16 @@ export default function RentBikeScreen({
         </TouchableOpacity>
 
         <View style={styles.topBarCenter}>
-          <Text style={styles.topBarTitle}>{t('rentBike.portalTitle', 'Rent Your Bike')}</Text>
-          <Text style={styles.topBarSubtitle}>{t('rentBike.portalSubtitle', 'Owner Listing Portal')}</Text>
+          <Text style={styles.topBarTitle}>
+            {isEditMode
+              ? (isHindi ? 'बाइक विवरण संपादित करें' : 'Edit Bike Details')
+              : t('rentBike.portalTitle', 'Rent Your Bike')}
+          </Text>
+          <Text style={styles.topBarSubtitle}>
+            {isEditMode
+              ? (isHindi ? 'मालिक लिस्टिंग पोर्टल • संपादन' : 'Owner Listing Portal • Edit Mode')
+              : t('rentBike.portalSubtitle', 'Owner Listing Portal')}
+          </Text>
         </View>
 
         <View style={styles.topBarRight}>
@@ -605,24 +973,115 @@ export default function RentBikeScreen({
             <View style={styles.heroTopRow}>
               <View style={styles.heroBadge}>
                 <Bike size={14} color="#38BDF8" />
-                <Text style={styles.heroBadgeText}>{t('rentBike.badge', 'OWNER ONBOARDING')}</Text>
+                <Text style={styles.heroBadgeText}>
+                  {isEditMode
+                    ? 'EDITING FLEET VEHICLE'
+                    : t('rentBike.badge', 'OWNER ONBOARDING')}
+                </Text>
               </View>
-              <TouchableOpacity
-                style={styles.demoFillBtn}
-                onPress={handleFillSampleData}
-                activeOpacity={0.7}
-              >
-                <Sparkles size={13} color="#38BDF8" />
-                <Text style={styles.demoFillBtnText}>{t('rentBike.demoDataBtn', 'Load Sample Demo Data')}</Text>
-              </TouchableOpacity>
+              <View style={styles.heroActionsRow}>
+                {isEditMode ? (
+                  <>
+                    {sharedBikes.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.selectExistingBtn}
+                        onPress={() => setShowSelectBikeModal(true)}
+                        activeOpacity={0.7}
+                      >
+                        <Bike size={13} color="#38BDF8" />
+                        <Text style={styles.selectExistingBtnText}>
+                          Switch Bike ({sharedBikes.length})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.demoFillBtn}
+                      onPress={handleSwitchToCreateMode}
+                      activeOpacity={0.7}
+                    >
+                      <Sparkles size={13} color="#38BDF8" />
+                      <Text style={styles.demoFillBtnText}>+ Add New Bike</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    {sharedBikes.length > 0 && (
+                      <TouchableOpacity
+                        style={styles.selectExistingBtn}
+                        onPress={() => setShowSelectBikeModal(true)}
+                        activeOpacity={0.7}
+                      >
+                        <Bike size={13} color="#38BDF8" />
+                        <Text style={styles.selectExistingBtnText}>
+                          Edit a Submitted Bike ({sharedBikes.length})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.demoFillBtn}
+                      onPress={handleFillSampleData}
+                      activeOpacity={0.7}
+                    >
+                      <Sparkles size={13} color="#38BDF8" />
+                      <Text style={styles.demoFillBtnText}>{t('rentBike.demoDataBtn', 'Load Sample Demo Data')}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
             <Text style={styles.heroHeading}>
-              {t('rentBike.heroHeading', 'Rent Your Bike – Turn Your Bike into an Earning Opportunity')}
+              {isEditMode
+                ? (isHindi ? 'बाइक विवरण संपादित करें – फ्लीट जानकारी अपडेट करें' : 'Edit Bike Details – Update Fleet Specifications & Rates')
+                : t('rentBike.heroHeading', 'Rent Your Bike – Turn Your Bike into an Earning Opportunity')}
             </Text>
             <Text style={styles.heroSubheading}>
-              {t('rentBike.heroSubheading', 'List your bike, connect with potential renters, and earn by sharing your vehicle with verified riders.')}
+              {isEditMode
+                ? (isHindi
+                    ? 'लाइव फ्लीट में अपनी मोटरसाइकिल के विनिर्देश, तस्वीरें, दस्तावेज या किराये की दरें अपडेट करें।'
+                    : 'Modify your vehicle details, photographs, RTO documents, or rental rates in the live fleet.')
+                : t('rentBike.heroSubheading', 'List your bike, connect with potential renters, and earn by sharing your vehicle with verified riders.')}
             </Text>
           </View>
+
+          {/* Active Edit Mode Banner */}
+          {isEditMode && (
+            <View style={styles.editModeBanner}>
+              <View style={styles.editModeBannerLeft}>
+                <View style={styles.editIconBadge}>
+                  <Bike size={18} color="#38BDF8" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.editBadgeRow}>
+                    <Text style={styles.editModeTag}>ACTIVE EDIT</Text>
+                    <Text style={styles.editModeBannerTitle} numberOfLines={1}>
+                      {formData.brand} {formData.model}
+                    </Text>
+                  </View>
+                  <Text style={styles.editModeBannerSub} numberOfLines={1}>
+                    Reg: {formData.registrationNumber || 'N/A'} • {formData.category || 'Motorcycle'} • ₹{Number(formData.dailyPrice || 1500).toLocaleString()}/day
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.editModeBannerActions}>
+                {sharedBikes.length > 1 && (
+                  <TouchableOpacity
+                    style={styles.switchBikePill}
+                    onPress={() => setShowSelectBikeModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.switchBikePillText}>Switch</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.cancelEditPill}
+                  onPress={handleSwitchToCreateMode}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.cancelEditPillText}>+ New</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Authentication Alert if user not logged in */}
           {!user && (
@@ -739,6 +1198,9 @@ export default function RentBikeScreen({
                 onSubmit={handleFinalSubmit}
                 isSubmitting={isSubmitting}
                 errors={stepErrors}
+                isEditMode={isEditMode}
+                navigation={navigation}
+                onGoToFleet={handleGoToFleet}
               />
             )}
 
@@ -815,21 +1277,107 @@ export default function RentBikeScreen({
         </View>
       </Modal>
 
-      {/* Submission Success Modal */}
+      {/* Submission / Edit Success Modal */}
       <SubmissionSuccessModal
         visible={!!successModalData}
         submissionData={successModalData}
-        onGoToListings={() => {
-          setSuccessModalData(null);
-          navigation?.navigate('Motorbikes', { initialCategory: 'all', timestamp: Date.now() });
-        }}
+        isEditMode={isEditMode}
+        onGoToListings={handleGoToFleet}
         onSubmitAnother={() => {
           setSuccessModalData(null);
-          setFormData(INITIAL_FORM_DATA);
-          setCurrentStep(0);
+          if (isEditMode) {
+            handleSwitchToCreateMode();
+          } else {
+            setFormData(INITIAL_FORM_DATA);
+            setCurrentStep(0);
+          }
         }}
         onClose={() => setSuccessModalData(null)}
       />
+
+      {/* Modal to Select an Existing Submitted Bike to Edit */}
+      <Modal
+        visible={showSelectBikeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSelectBikeModal(false)}
+      >
+        <View style={styles.selectModalOverlay}>
+          <View style={styles.selectModalCard}>
+            <View style={styles.selectModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectModalTitle}>Select a Submitted Bike to Edit</Text>
+                <Text style={styles.selectModalSub}>
+                  Choose any vehicle from your live fleet inventory to modify its details.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.selectModalClose}
+                onPress={() => setShowSelectBikeModal(false)}
+                activeOpacity={0.7}
+              >
+                <X size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.selectModalList} showsVerticalScrollIndicator={false}>
+              {sharedBikes && sharedBikes.length > 0 ? (
+                sharedBikes.map((bike, idx) => {
+                  const bImg =
+                    bike.images?.front ||
+                    bike.photos?.front ||
+                    (typeof bike.image === 'string' ? bike.image : bike.imageSource?.uri) ||
+                    'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800';
+                  const isSelected =
+                    editingBike &&
+                    (editingBike.id === bike.id ||
+                      editingBike._id === bike._id ||
+                      (bike.registrationNumber && editingBike.registrationNumber === bike.registrationNumber));
+
+                  return (
+                    <TouchableOpacity
+                      key={bike.id || bike._id || idx}
+                      style={[styles.selectBikeItem, isSelected && styles.selectBikeItemSelected]}
+                      onPress={() => handleSelectBikeToEdit(bike)}
+                      activeOpacity={0.8}
+                    >
+                      <Image source={{ uri: bImg }} style={styles.selectBikeThumb} resizeMode="cover" />
+                      <View style={styles.selectBikeInfo}>
+                        <View style={styles.selectBikeTitleRow}>
+                          <Text style={styles.selectBikeName} numberOfLines={1}>
+                            {bike.name || `${bike.brand || ''} ${bike.model || ''}`}
+                          </Text>
+                          {isSelected && (
+                            <View style={styles.currentEditingPill}>
+                              <Text style={styles.currentEditingPillText}>Current</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.selectBikeReg}>
+                          Reg: {bike.registrationNumber || 'N/A'} • {bike.category || 'Motorcycle'}
+                        </Text>
+                        <Text style={styles.selectBikePrice}>
+                          ₹{Number(bike.dailyPrice || bike.pricePerDay || 1500).toLocaleString()}/day
+                        </Text>
+                      </View>
+                      <View style={[styles.selectBikeAction, isSelected && styles.selectBikeActionSelected]}>
+                        <Text style={[styles.selectBikeActionText, isSelected && styles.selectBikeActionTextSelected]}>
+                          {isSelected ? 'Editing' : 'Edit →'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={styles.emptySelectBox}>
+                  <Bike size={32} color="#64748B" />
+                  <Text style={styles.emptySelectText}>No submitted bikes found in fleet.</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1205,6 +1753,268 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 12,
     fontWeight: '700',
+  },
+  heroActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  selectExistingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  selectExistingBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  newBikeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  newBikeBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  editModeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    borderRadius: RADIUS.lg,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 189, 248, 0.45)',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  editModeBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 220,
+  },
+  editIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  editBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  editModeTag: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#38BDF8',
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    letterSpacing: 0.5,
+  },
+  editModeBannerTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  editModeBannerSub: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  editModeBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  switchBikePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  switchBikePillText: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cancelEditPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+  },
+  cancelEditPillText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  selectModalCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: '85%',
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  selectModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 14,
+    gap: 12,
+  },
+  selectModalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  selectModalSub: {
+    fontSize: 12,
+    color: '#94A3B8',
+    lineHeight: 16,
+  },
+  selectModalClose: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  selectModalList: {
+    maxHeight: 420,
+  },
+  selectBikeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: RADIUS.lg,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 12,
+  },
+  selectBikeItemSelected: {
+    borderColor: '#38BDF8',
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+  },
+  selectBikeThumb: {
+    width: 64,
+    height: 52,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#020617',
+  },
+  selectBikeInfo: {
+    flex: 1,
+  },
+  selectBikeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  selectBikeName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  currentEditingPill: {
+    backgroundColor: 'rgba(52, 211, 153, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  currentEditingPillText: {
+    color: '#34D399',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  selectBikeReg: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    marginBottom: 2,
+  },
+  selectBikePrice: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#38BDF8',
+  },
+  selectBikeAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  selectBikeActionSelected: {
+    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+    borderColor: 'rgba(52, 211, 153, 0.4)',
+  },
+  selectBikeActionText: {
+    color: '#38BDF8',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  selectBikeActionTextSelected: {
+    color: '#34D399',
+  },
+  emptySelectBox: {
+    alignItems: 'center',
+    paddingVertical: 36,
+    gap: 8,
+  },
+  emptySelectText: {
+    color: '#64748B',
+    fontSize: 13,
   },
 });
 

@@ -349,6 +349,21 @@ export default function App() {
     showToast(`Motorcycle ${newBike.registrationNumber || newBike.name || newBike.model} added to fleet!`);
   };
 
+  const handleBikeUpdated = (updatedBike) => {
+    setSharedBikes((prev) =>
+      prev.map((b) => {
+        const matches =
+          (updatedBike._id && (b._id === updatedBike._id || b.id === updatedBike._id)) ||
+          (updatedBike.id && (b.id === updatedBike.id || b._id === updatedBike.id)) ||
+          (updatedBike.listingCode && (b.id === updatedBike.listingCode || b.listingCode === updatedBike.listingCode)) ||
+          (updatedBike.registrationNumber && b.registrationNumber === updatedBike.registrationNumber);
+        return matches ? { ...b, ...updatedBike } : b;
+      })
+    );
+    fetchFleet();
+    showToast(`Motorcycle ${updatedBike.registrationNumber || updatedBike.name || updatedBike.model} updated successfully!`);
+  };
+
   const handleBookingConfirmed = (bookingData, targetBike) => {
     const bikeId = targetBike?._id || targetBike?.id || targetBike?.listingCode;
     const bookedUserId = user?.id || user?._id || bookingData?.renterId?._id || bookingData?.renterId;
@@ -535,6 +550,16 @@ export default function App() {
     setIsQuoteOpen(true);
   };
 
+  const handleRentBikePress = () => {
+    if (!user) {
+      setIsAuthOpen(true);
+      return;
+    }
+    if (navigationRef.current) {
+      navigationRef.current.navigate('RentBike');
+    }
+  };
+
   if (documentPath) {
     return (
       <ErrorBoundary>
@@ -573,6 +598,8 @@ export default function App() {
                 onShowToast={showToast}
                 sharedBikes={sharedBikes}
                 onBikeSubmitted={handleBikeSubmitted}
+                onBikeUpdated={handleBikeUpdated}
+                onRentBikePress={handleRentBikePress}
                 onBookingConfirmed={handleBookingConfirmed}
                 onSignOut={handleSignOut}
               />

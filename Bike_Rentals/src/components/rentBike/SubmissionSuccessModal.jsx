@@ -21,6 +21,7 @@ export default function SubmissionSuccessModal({
   onGoToListings,
   onSubmitAnother,
   onClose,
+  isEditMode = false,
 }) {
   const { t, isHindi } = useLanguage();
   if (!visible) return null;
@@ -40,13 +41,19 @@ export default function SubmissionSuccessModal({
           </View>
 
           <Text style={styles.title}>
-            {isHindi ? 'मोटरसाइकिल सफलतापूर्वक फ्लीट में जोड़ी गई!' : 'Motorcycle Added to Fleet Successfully!'}
+            {isEditMode
+              ? (isHindi ? 'मोटरसाइकिल विवरण सफलतापूर्वक अपडेट किया गया!' : 'Motorcycle Details Updated Successfully!')
+              : (isHindi ? 'मोटरसाइकिल सफलतापूर्वक फ्लीट में जोड़ी गई!' : 'Motorcycle Added to Fleet Successfully!')}
           </Text>
 
           <Text style={styles.message}>
-            {isHindi
-              ? 'यह वाहन अब आपके सक्रिय फ्लीट इन्वेंट्री में उपलब्ध है और ग्राहकों द्वारा तत्काल बुकिंग के लिए तैयार है।'
-              : 'This vehicle is now active in your fleet inventory and ready for immediate reservation by riders.'}
+            {isEditMode
+              ? (isHindi
+                  ? 'परिवर्तन सहेज लिए गए हैं और लाइव फ्लीट इन्वेंट्री में अपडेट हो गए हैं।'
+                  : 'Your changes have been saved and are now live in your fleet inventory.')
+              : (isHindi
+                  ? 'यह वाहन अब आपके सक्रिय फ्लीट इन्वेंट्री में उपलब्ध है और ग्राहकों द्वारा तत्काल बुकिंग के लिए तैयार है।'
+                  : 'This vehicle is now active in your fleet inventory and ready for immediate reservation by riders.')}
           </Text>
 
           {/* Submission Details Card */}
@@ -97,7 +104,11 @@ export default function SubmissionSuccessModal({
           <View style={styles.actionsGroup}>
             <TouchableOpacity
               style={styles.primaryActionBtn}
-              onPress={onGoToListings}
+              onPress={() => {
+                if (typeof onGoToListings === 'function') {
+                  onGoToListings();
+                }
+              }}
               activeOpacity={0.8}
             >
               <Bike size={18} color="#FFFFFF" />
@@ -113,7 +124,9 @@ export default function SubmissionSuccessModal({
             >
               <PlusCircle size={16} color="#94A3B8" />
               <Text style={styles.secondaryActionText}>
-                {isHindi ? 'एक और बाइक जोड़ें' : 'Add Another Motorcycle'}
+                {isEditMode
+                  ? (isHindi ? 'एक नई बाइक जोड़ें' : 'Add a New Bike')
+                  : (isHindi ? 'एक और बाइक जोड़ें' : 'Add Another Motorcycle')}
               </Text>
             </TouchableOpacity>
           </View>

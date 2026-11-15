@@ -35,15 +35,56 @@ export default function StepReviewSubmit({
   onSubmit,
   isSubmitting = false,
   errors = {},
+  isEditMode = false,
+  navigation,
+  onGoToFleet,
 }) {
   const { t, isHindi } = useLanguage();
-  const [agreedAccurate, setAgreedAccurate] = useState(false);
-  const [agreedAuthorization, setAgreedAuthorization] = useState(false);
-  const [agreedPolicies, setAgreedPolicies] = useState(false);
-  const [agreedConsent, setAgreedConsent] = useState(false);
+  const [agreedAccurate, setAgreedAccurate] = useState(isEditMode);
+  const [agreedAuthorization, setAgreedAuthorization] = useState(isEditMode);
+  const [agreedPolicies, setAgreedPolicies] = useState(isEditMode);
+  const [agreedConsent, setAgreedConsent] = useState(isEditMode);
   const [agreementError, setAgreementError] = useState('');
 
+  // If in edit mode, ensure agreements are considered valid
+  React.useEffect(() => {
+    if (isEditMode) {
+      setAgreedAccurate(true);
+      setAgreedAuthorization(true);
+      setAgreedPolicies(true);
+      setAgreedConsent(true);
+    }
+  }, [isEditMode]);
+
   const allAgreed = agreedAccurate && agreedAuthorization && agreedPolicies && agreedConsent;
+
+  const handleNavigateToFleet = () => {
+    if (typeof onGoToFleet === 'function') {
+      onGoToFleet();
+      return;
+    }
+    if (navigation?.navigate) {
+      try {
+        navigation.navigate('MainTabs', {
+          screen: 'Motorbikes',
+          params: { initialCategory: 'all', timestamp: Date.now() },
+        });
+      } catch (e) {}
+      try {
+        navigation.navigate('Motorbikes', { initialCategory: 'all', timestamp: Date.now() });
+      } catch (e) {}
+      try {
+        const parent = navigation.getParent?.();
+        if (parent?.navigate) {
+          parent.navigate('MainTabs', {
+            screen: 'Motorbikes',
+            params: { initialCategory: 'all', timestamp: Date.now() },
+          });
+          parent.navigate('Motorbikes', { initialCategory: 'all', timestamp: Date.now() });
+        }
+      } catch (e) {}
+    }
+  };
 
   const handleSubmit = () => {
     if (!allAgreed) {
@@ -62,11 +103,21 @@ export default function StepReviewSubmit({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View style={styles.badgePill}>
-          <Text style={styles.badgeText}>FLEET ADDITION • REVIEW</Text>
+          <Text style={styles.badgeText}>
+            {isEditMode ? 'FLEET UPDATE • REVIEW' : 'FLEET ADDITION • REVIEW'}
+          </Text>
         </View>
-        <Text style={styles.sectionTitle}>{t('rentBike.reviewTitle', 'Review & Add to Fleet')}</Text>
+        <Text style={styles.sectionTitle}>
+          {isEditMode
+            ? (isHindi ? 'विवरण की समीक्षा करें और अपडेट करें' : 'Review & Update Bike Details')
+            : t('rentBike.reviewTitle', 'Review & Add to Fleet')}
+        </Text>
         <Text style={styles.sectionSub}>
-          {t('rentBike.reviewSub', 'Please verify the motorcycle specifications, documents, and rental rates before publishing to the live fleet.')}
+          {isEditMode
+            ? (isHindi
+                ? 'कृपया लाइव फ्लीट में परिवर्तन सहेजने से पहले विनिर्देशों, दस्तावेजों और दरों की पुष्टि करें।'
+                : 'Please verify the updated motorcycle specifications, documents, and rental rates before saving changes.')
+            : t('rentBike.reviewSub', 'Please verify the motorcycle specifications, documents, and rental rates before publishing to the live fleet.')}
         </Text>
       </View>
 
@@ -319,9 +370,24 @@ export default function StepReviewSubmit({
           ) : (
             <>
               <Send size={16} color="#FFFFFF" />
-              <Text style={styles.finalSubmitBtnText}>Publish Motorcycle to Fleet</Text>
+              <Text style={styles.finalSubmitBtnText}>
+                {isEditMode
+                  ? (isHindi ? 'मोटरसाइकिल विवरण अपडेट करें' : 'Update Motorcycle Details')
+                  : 'Publish Motorcycle to Fleet'}
+              </Text>
             </>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.viewFleetCatalogBtn}
+          onPress={handleNavigateToFleet}
+          activeOpacity={0.8}
+        >
+          <Bike size={16} color="#38BDF8" />
+          <Text style={styles.viewFleetCatalogBtnText}>
+            {isHindi ? 'फ्लीट कैटलॉग देखें' : 'View Fleet Catalog'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -585,5 +651,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.3,
+  },
+  viewFleetCatalogBtn: {
+    marginTop: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+  },
+  viewFleetCatalogBtnText: {
+    color: '#38BDF8',
+    fontSize: 13.5,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

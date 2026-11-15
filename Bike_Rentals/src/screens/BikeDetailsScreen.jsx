@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Edit3,
 } from 'lucide-react-native';
 import { BIKES_DATA } from '../data/bikes';
 import { resolveImage } from '../assets/images';
@@ -30,6 +31,7 @@ import WhatsAppIcon from '../components/WhatsAppIcon';
 export default function BikeDetailsScreen({
   route,
   navigation,
+  user,
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookModal,
@@ -276,6 +278,17 @@ export default function BikeDetailsScreen({
                 <WhatsAppIcon size={14} color="#FFFFFF" withCircle circleSize={24} />
                 <Text style={styles.whatsAppBtnText}>Enquire on WhatsApp</Text>
               </TouchableOpacity>
+
+              {user?.role === 'OWNER' && (
+                <TouchableOpacity
+                  style={styles.ownerEditBtn}
+                  onPress={() => navigation?.navigate('RentBike', { bikeToEdit: bike })}
+                  activeOpacity={0.8}
+                >
+                  <Edit3 size={15} color="#000000" strokeWidth={2.4} />
+                  <Text style={styles.ownerEditBtnText}>Edit Bike Details</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -711,6 +724,24 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  ownerEditBtn: {
+    flex: 1,
+    backgroundColor: '#38BDF8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+  },
+  ownerEditBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '800',
   },
   section: {
     paddingTop: 24,

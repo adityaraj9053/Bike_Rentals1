@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText } from 'lucide-react-native';
+import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText, Edit3 } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import WhatsAppIcon from './WhatsAppIcon';
@@ -203,6 +203,16 @@ export default function BikeCard({
             <Text style={styles.viewRenterBtnText}>View Customer & Booking Details</Text>
             <ArrowRight size={13} color="#FFFFFF" strokeWidth={2.2} />
           </TouchableOpacity>
+
+          {/* Quick Edit Bike button for Owner */}
+          <TouchableOpacity
+            style={styles.ownerEditQuickBtn}
+            onPress={() => onSelectBike && onSelectBike(bike)}
+            activeOpacity={0.8}
+          >
+            <Edit3 size={13} color="#38BDF8" strokeWidth={2.2} />
+            <Text style={styles.ownerEditQuickBtnText}>Edit Bike Details</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -346,6 +356,18 @@ export default function BikeCard({
           </View>
 
           <View style={styles.actionButtonsRow}>
+            {/* Quick Edit for Owner */}
+            {activeUser?.role === 'OWNER' && (
+              <TouchableOpacity
+                style={styles.cardEditBtn}
+                onPress={() => onSelectBike && onSelectBike(bike)}
+                activeOpacity={0.8}
+                accessibilityLabel="Edit Bike Details"
+              >
+                <Edit3 size={14} color="#38BDF8" strokeWidth={2.4} />
+              </TouchableOpacity>
+            )}
+
             {/* Quick WhatsApp Action Button */}
             <TouchableOpacity
               style={styles.cardWhatsAppBtn}
@@ -785,5 +807,33 @@ const styles = StyleSheet.create({
   },
   bookBtnTextCompact: {
     fontSize: 11,
+  },
+  cardEditBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownerEditQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    marginTop: 6,
+  },
+  ownerEditQuickBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

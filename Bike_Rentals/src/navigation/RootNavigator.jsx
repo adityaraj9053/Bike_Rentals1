@@ -41,6 +41,7 @@ function BottomTabNavigator({
   onOpenBookModal,
   onShowToast,
   onBikeSubmitted,
+  onBikeUpdated,
   onRentBikePress,
   onOpenBookingDetails,
   sharedBikes,
@@ -149,6 +150,8 @@ function BottomTabNavigator({
               onOpenAuth={onOpenAuth}
               onShowToast={onShowToast}
               onBikeSubmitted={onBikeSubmitted}
+              onBikeUpdated={onBikeUpdated}
+              sharedBikes={sharedBikes}
             />
           )}
         </Tab.Screen>
@@ -202,6 +205,7 @@ export default function RootNavigator({
   onShowToast,
   sharedBikes,
   onBikeSubmitted,
+  onBikeUpdated,
   onRentBikePress,
   onOpenBookingDetails,
   onBookingConfirmed,
@@ -230,6 +234,7 @@ export default function RootNavigator({
             onOpenBookModal={onOpenBookModal}
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
+            onBikeUpdated={onBikeUpdated}
             onRentBikePress={onRentBikePress}
             onOpenBookingDetails={onOpenBookingDetails}
             sharedBikes={sharedBikes}
@@ -251,6 +256,8 @@ export default function RootNavigator({
               onOpenAuth={onOpenAuth}
               onShowToast={onShowToast}
               onBikeSubmitted={onBikeSubmitted}
+              onBikeUpdated={onBikeUpdated}
+              sharedBikes={sharedBikes}
             />
           ) : (
             <HomeScreen
@@ -312,6 +319,7 @@ export default function RootNavigator({
           <BuyerDetailsScreen
             {...props}
             user={user}
+            sharedBikes={sharedBikes}
             onSignOut={onSignOut}
             onShowToast={onShowToast}
           />
@@ -336,6 +344,7 @@ export default function RootNavigator({
         {(props) => (
           <BikeDetailsScreen
             {...props}
+            user={user}
             onStartBooking={onStartBooking}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookModal={onOpenBookModal}

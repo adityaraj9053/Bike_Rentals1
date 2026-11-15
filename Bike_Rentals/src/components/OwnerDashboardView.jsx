@@ -26,6 +26,7 @@ import {
   Sparkles,
   ArrowRight,
   Trash2,
+  Edit3,
 } from 'lucide-react-native';
 import { COLORS, RADIUS } from '../theme/colors';
 import { bookingsAPI } from '../services/api';
@@ -36,12 +37,14 @@ export default function OwnerDashboardView({
   onSignOut,
   onShowToast,
   onNavigateToRentBike,
+  sharedBikes = [],
 }) {
   const [loading, setLoading] = useState(true);
   const [activeBookings, setActiveBookings] = useState([]);
   const [selectedDoc, setSelectedDoc] = useState(null); // { title, url, fileName, type }
   const [isDocModalVisible, setIsDocModalVisible] = useState(false);
   const [returningId, setReturningId] = useState(null);
+  const [activeTab, setActiveTab] = useState('fleet'); // 'fleet' | 'buyers'
 
   const fetchOwnerBookings = async () => {
     setLoading(true);
@@ -209,17 +212,25 @@ export default function OwnerDashboardView({
 
       {/* KPI Stats Bar */}
       <View style={styles.kpiContainer}>
-        <View style={styles.kpiCard}>
-          <Text style={styles.kpiValue}>{activeBookings.length}</Text>
+        <TouchableOpacity
+          style={[styles.kpiCard, activeTab === 'fleet' && styles.kpiCardSelected]}
+          onPress={() => setActiveTab('fleet')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.kpiValue}>{sharedBikes.length}</Text>
+          <Text style={styles.kpiLabel}>Listed Fleet Bikes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.kpiCard, styles.kpiCardMiddle, activeTab === 'buyers' && styles.kpiCardSelected]}
+          onPress={() => setActiveTab('buyers')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.kpiValue, { color: '#38BDF8' }]}>{activeBookings.length}</Text>
           <Text style={styles.kpiLabel}>Active Rentals</Text>
-        </View>
-        <View style={[styles.kpiCard, styles.kpiCardMiddle]}>
-          <Text style={[styles.kpiValue, { color: '#34D399' }]}>Automated</Text>
-          <Text style={styles.kpiLabel}>Auto-Clean Mode</Text>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.kpiCard, styles.kpiCardAction]}
-          onPress={onNavigateToRentBike}
+          onPress={() => onNavigateToRentBike && onNavigateToRentBike()}
           activeOpacity={0.8}
         >
           <Bike size={16} color="#38BDF8" />
@@ -227,23 +238,175 @@ export default function OwnerDashboardView({
         </TouchableOpacity>
       </View>
 
-      {/* Auto-Removal Policy Notice */}
-      <View style={styles.autoRemovalBanner}>
-        <Clock size={13} color="#38BDF8" />
-        <Text style={styles.autoRemovalBannerText}>
-          Auto-Removal Active: Expired bookings & submitted user documents are automatically purged from this dashboard once returned or rental timeline has elapsed.
-        </Text>
+      {/* Navigation Segment Tabs */}
+      <View style={styles.tabBarRow}>
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'fleet' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('fleet')}
+          activeOpacity={0.8}
+        >
+          <Bike size={15} color={activeTab === 'fleet' ? '#38BDF8' : '#94A3B8'} />
+          <Text style={[styles.segmentTabText, activeTab === 'fleet' && styles.segmentTabTextActive]}>
+            My Listed Fleet ({sharedBikes.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'buyers' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('buyers')}
+          activeOpacity={0.8}
+        >
+          <User size={15} color={activeTab === 'buyers' ? '#38BDF8' : '#94A3B8'} />
+          <Text style={[styles.segmentTabText, activeTab === 'buyers' && styles.segmentTabTextActive]}>
+            Buyer's Details ({activeBookings.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Prominent "Buyer's Detail" Section Header */}
-      <View style={styles.sectionHeaderRow}>
-        <View style={styles.sectionHeaderLeft}>
-          <Text style={styles.sectionTitle}>Buyer's Detail</Text>
-          <View style={styles.activePill}>
-            <Text style={styles.activePillText}>{activeBookings.length} Active</Text>
+      {/* TAB 1: FLEET INVENTORY & EDIT PORTAL */}
+      {activeTab === 'fleet' && (
+        <View style={styles.fleetListSection}>
+          <View style={styles.fleetHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>My Submitted Fleet</Text>
+              <Text style={styles.fleetSubtitle}>
+                Select any motorcycle below to edit its specifications, RTO documents, or rental rates.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.addBikeHeaderBtn}
+              onPress={() => onNavigateToRentBike && onNavigateToRentBike()}
+              activeOpacity={0.8}
+            >
+              <Bike size={14} color="#FFFFFF" />
+              <Text style={styles.addBikeHeaderBtnText}>+ Add Bike</Text>
+            </TouchableOpacity>
           </View>
+
+          {sharedBikes && sharedBikes.length > 0 ? (
+            <View style={styles.fleetCardsContainer}>
+              {sharedBikes.map((bike, idx) => {
+                const bImg =
+                  bike.images?.front ||
+                  bike.photos?.front ||
+                  (typeof bike.image === 'string' ? bike.image : bike.imageSource?.uri) ||
+                  'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800';
+                const bikeId = bike.id || bike._id || idx;
+                const bikeName = bike.name || `${bike.brand || ''} ${bike.model || ''}`;
+
+                return (
+                  <View key={bikeId} style={styles.fleetCardItem}>
+                    <Image source={{ uri: bImg }} style={styles.fleetCardImg} resizeMode="cover" />
+
+                    <View style={styles.fleetCardDetails}>
+                      <View style={styles.fleetCardTop}>
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text style={styles.fleetCardName} numberOfLines={1}>
+                            {bikeName}
+                          </Text>
+                          <Text style={styles.fleetCardReg}>
+                            Reg: {bike.registrationNumber || 'N/A'} • {bike.category || 'Motorcycle'}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.fleetStatusTag,
+                            bike.isBooked ? styles.fleetStatusTagBooked : styles.fleetStatusTagAvailable,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.fleetStatusTagText,
+                              bike.isBooked ? styles.fleetStatusTagTextBooked : styles.fleetStatusTagTextAvailable,
+                            ]}
+                          >
+                            {bike.isBooked ? 'BOOKED' : 'AVAILABLE'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.fleetSpecsRow}>
+                        <View style={styles.fleetSpecPill}>
+                          <Text style={styles.fleetSpecPillText}>
+                            Engine: {bike.engineCapacity || bike.engineCapacityCc || bike.specs?.displacement || '350'} CC
+                          </Text>
+                        </View>
+                        <View style={styles.fleetSpecPill}>
+                          <Text style={styles.fleetSpecPillText}>
+                            {bike.transmission || bike.specs?.transmission || 'Manual'}
+                          </Text>
+                        </View>
+                        <View style={styles.fleetSpecPill}>
+                          <Text style={styles.fleetSpecPillText}>
+                            Deposit: ₹{Number(bike.deposit || bike.securityDeposit || 3000).toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.fleetCardBottomRow}>
+                        <View style={styles.fleetPriceBox}>
+                          <Text style={styles.fleetPriceText}>
+                            ₹{Number(bike.dailyPrice || bike.pricePerDay || 1500).toLocaleString()}
+                          </Text>
+                          <Text style={styles.fleetPricePerDay}>/ day</Text>
+                        </View>
+
+                        {/* EDIT BIKE DETAILS BUTTON */}
+                        <TouchableOpacity
+                          style={styles.editBikeBtn}
+                          onPress={() => onNavigateToRentBike && onNavigateToRentBike(bike)}
+                          activeOpacity={0.8}
+                          accessibilityLabel={`Edit details for ${bikeName}`}
+                        >
+                          <Edit3 size={14} color="#000000" strokeWidth={2.4} />
+                          <Text style={styles.editBikeBtnText}>Edit Bike Details</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyFleetBox}>
+              <Bike size={36} color="#64748B" />
+              <Text style={styles.emptyFleetTitle}>No Listed Motorcycles Found</Text>
+              <Text style={styles.emptyFleetSub}>
+                You haven't listed any bikes in your fleet yet. Submit your first vehicle to start earning.
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyAddBtn}
+                onPress={() => onNavigateToRentBike && onNavigateToRentBike()}
+                activeOpacity={0.8}
+              >
+                <Bike size={16} color="#FFFFFF" />
+                <Text style={styles.emptyAddBtnText}>+ Add First Bike</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      </View>
+      )}
+
+      {/* TAB 2: BUYER'S DETAILS (ACTIVE BOOKINGS) */}
+      {activeTab === 'buyers' && (
+        <View style={styles.buyersSectionWrapper}>
+          {/* Auto-Removal Policy Notice */}
+          <View style={styles.autoRemovalBanner}>
+            <Clock size={13} color="#38BDF8" />
+            <Text style={styles.autoRemovalBannerText}>
+              Auto-Removal Active: Expired bookings & submitted user documents are automatically purged from this dashboard once returned or rental timeline has elapsed.
+            </Text>
+          </View>
+
+          {/* Prominent "Buyer's Detail" Section Header */}
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={styles.sectionTitle}>Buyer's Detail</Text>
+              <View style={styles.activePill}>
+                <Text style={styles.activePillText}>{activeBookings.length} Active</Text>
+              </View>
+            </View>
+          </View>
 
       {/* Bookings & Submitted Documents List */}
       {loading ? (
@@ -314,6 +477,14 @@ export default function OwnerDashboardView({
                       Total Paid: ₹{(b.pricing?.totalPayable || b.pricing?.rentalTotal || 3000).toLocaleString('en-IN')}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    style={styles.editBikeQuickBtn}
+                    onPress={() => onNavigateToRentBike && onNavigateToRentBike(bike)}
+                    activeOpacity={0.8}
+                  >
+                    <Edit3 size={13} color="#38BDF8" />
+                    <Text style={styles.editBikeQuickBtnText}>Edit Bike</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Buyer / Renter Info Box */}
@@ -430,6 +601,8 @@ export default function OwnerDashboardView({
             );
           })}
         </View>
+      )}
+      </View>
       )}
 
       {/* Footer Sign Out */}
@@ -882,6 +1055,246 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 13,
     fontWeight: '700',
+  },
+  kpiCardSelected: {
+    borderColor: '#38BDF8',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  tabBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 16,
+    paddingHorizontal: 2,
+  },
+  segmentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  segmentTabActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderColor: '#38BDF8',
+  },
+  segmentTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  segmentTabTextActive: {
+    color: '#38BDF8',
+    fontWeight: '800',
+  },
+  fleetListSection: {
+    gap: 14,
+  },
+  fleetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  fleetSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 3,
+    lineHeight: 17,
+  },
+  addBikeHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+  },
+  addBikeHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fleetCardsContainer: {
+    gap: 12,
+  },
+  fleetCardItem: {
+    flexDirection: 'row',
+    backgroundColor: '#0B1526',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.2)',
+    overflow: 'hidden',
+    padding: 12,
+    gap: 14,
+    alignItems: 'center',
+  },
+  fleetCardImg: {
+    width: 90,
+    height: 78,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#0F172A',
+  },
+  fleetCardDetails: {
+    flex: 1,
+    gap: 6,
+  },
+  fleetCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  fleetCardName: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  fleetCardReg: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  fleetStatusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  fleetStatusTagAvailable: {
+    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.3)',
+  },
+  fleetStatusTagBooked: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  fleetStatusTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  fleetStatusTagTextAvailable: {
+    color: '#34D399',
+  },
+  fleetStatusTagTextBooked: {
+    color: '#EF4444',
+  },
+  fleetSpecsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  fleetSpecPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  fleetSpecPillText: {
+    fontSize: 10.5,
+    color: '#94A3B8',
+  },
+  fleetCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  fleetPriceBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  fleetPriceText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#38BDF8',
+  },
+  fleetPricePerDay: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  editBikeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#38BDF8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  editBikeBtnText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyFleetBox: {
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    gap: 10,
+  },
+  emptyFleetTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  emptyFleetSub: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
+  },
+  emptyAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+    marginTop: 6,
+  },
+  emptyAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  editBikeQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    alignSelf: 'center',
+  },
+  editBikeQuickBtnText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  buyersSectionWrapper: {
+    gap: 14,
   },
 });
 
