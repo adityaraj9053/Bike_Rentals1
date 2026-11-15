@@ -95,7 +95,7 @@ export default function EnquiryModal({
       `Phone: ${formattedPhone}\n` +
       (message ? `Note: ${message}` : '')
     );
-    Linking.openURL(`https://wa.me/919876543210?text=${text}`).catch(() => {});
+    Linking.openURL(`https://wa.9304618599?text=${text}`).catch(() => {});
     if (onShowToast) onShowToast(isHindi ? `${currentBike.name} के लिए व्हाट्सएप खुल रहा है!` : `Opening WhatsApp concierge for ${currentBike.name}!`);
     onClose();
   };

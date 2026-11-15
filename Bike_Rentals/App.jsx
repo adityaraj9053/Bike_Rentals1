@@ -22,7 +22,7 @@ import DirectDocumentScreen from './src/screens/DirectDocumentScreen';
 import { BIKES_DATA } from './src/data/bikes';
 import { INITIAL_BIKE_LISTINGS } from './src/data/marketplaceData';
 import { COLORS } from './src/theme/colors';
-import { authStorage, authAPI, bikesAPI } from './src/services/api';
+import { authStorage, authAPI, bikesAPI, ownerAPI } from './src/services/api';
 import { isOwnerUser } from './src/utils/authUtils';
 
 class ErrorBoundary extends Component {
@@ -150,6 +150,58 @@ export default function App() {
 
   // Shared Marketplace State for listings submitted via "Rent Your Bike"
   const [sharedBikes, setSharedBikes] = useState(BIKES_DATA);
+
+  // Shared Contact & Hub Settings
+  const DEFAULT_CONTACT_SETTINGS = {
+    contactPhone: '+91 98765 43210',
+    whatsappNumber: '+91 98765 43210',
+    hubName: 'Central Rental Hub',
+    hubAddress: 'Plot 42, Metro Ring Road, South City, Bangalore, 560034',
+    mapUrl: 'https://maps.google.com/?q=Plot+42+Metro+Ring+Road+South+City+Bangalore',
+    contactEmail: 'rentals@theroadeagle.com',
+    operatingHoursText: 'Monday – Sunday: 08:00 AM – 09:30 PM',
+    operatingHoursSubtext: '24/7 emergency roadside support active',
+    emailResponseTime: 'Within 2 business hours',
+  };
+
+  const [contactSettings, setContactSettings] = useState(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem('the_road_eagle_contact_settings');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return DEFAULT_CONTACT_SETTINGS;
+  });
+
+  useEffect(() => {
+    ownerAPI
+      .getSettings()
+      .then((res) => {
+        if (res && res.data) {
+          setContactSettings((prev) => {
+            const merged = { ...prev, ...res.data };
+            if (typeof window !== 'undefined' && window.localStorage) {
+              window.localStorage.setItem('the_road_eagle_contact_settings', JSON.stringify(merged));
+            }
+            return merged;
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('[App] Contact settings load notice:', err.message);
+      });
+  }, []);
+
+  const handleContactSettingsUpdated = (newSettings) => {
+    setContactSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('the_road_eagle_contact_settings', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
 
   const formatDbBike = (b) => {
     const c = (b.category || '').toLowerCase();
@@ -620,6 +672,8 @@ export default function App() {
                 onOpenBookModal={handleOpenBookModal}
                 onShowToast={showToast}
                 sharedBikes={sharedBikes}
+                contactSettings={contactSettings}
+                onContactSettingsUpdated={handleContactSettingsUpdated}
                 onBikeSubmitted={handleBikeSubmitted}
                 onBikeUpdated={handleBikeUpdated}
                 onBikeDeleted={handleBikeDeleted}
@@ -631,7 +685,7 @@ export default function App() {
               {/* Floating WhatsApp Quick Action Button */}
               <FloatingWhatsApp
                 onPress={() => handleOpenWhatsApp()}
-                phone="919876543210"
+                phone={(contactSettings?.whatsappNumber || contactSettings?.contactPhone || '919304618599').replace(/[^0-9]/g, '')}
               />
 
               {/* Action Modals */}
@@ -641,6 +695,7 @@ export default function App() {
                 bike={bookModalBike}
                 onStartBooking={handleStartBooking}
                 onShowToast={showToast}
+                contactSettings={contactSettings}
               />
 
               <EnquiryModal
@@ -648,6 +703,7 @@ export default function App() {
                 onClose={() => setIsEnquiryOpen(false)}
                 selectedBike={enquiryBike}
                 onShowToast={showToast}
+                contactSettings={contactSettings}
               />
 
               <AuthModal

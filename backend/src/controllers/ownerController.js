@@ -19,45 +19,48 @@ export async function getBusinessSettings(req, res) {
     let settings = await BusinessSettingModel.findOne();
 
     if (!settings) {
-      // Find or create default owner user
-      let ownerUser = await UserModel.findOne({ role: 'OWNER' });
-      if (!ownerUser) {
-        ownerUser = await UserModel.create({
-          email: 'owner@theroadeagle.com',
-          fullName: 'Fleet Operations Manager',
-          phoneNumber: '9876543210',
-          role: 'OWNER',
-          emailVerified: true,
-        });
-      }
-
       settings = await BusinessSettingModel.create({
-        ownerUserId: ownerUser._id,
         businessName: 'The Road Eagle',
-        ownerFullName: ownerUser.fullName,
-        contactPhone: ownerUser.phoneNumber || '+91 98765 43210',
-        contactEmail: ownerUser.email,
+        ownerFullName: 'Fleet Operations Manager',
+        contactPhone: '+91 98765 43210',
+        contactEmail: 'rentals@theroadeagle.com',
+        hubName: 'Central Rental Hub',
+        hubAddress: 'Plot 42, Metro Ring Road, South City, Bangalore, 560034',
+        mapUrl: 'https://maps.google.com/?q=Plot+42+Metro+Ring+Road+South+City+Bangalore',
+        whatsappNumber: '+91 98765 43210',
+        operatingHoursText: 'Monday – Sunday: 08:00 AM – 09:30 PM',
+        operatingHoursSubtext: '24/7 emergency roadside support active',
+        emailResponseTime: 'Within 2 business hours',
         defaultPickupHub: {
-          name: 'The Road Eagle Flagship Hub',
-          address: '123 Rider Avenue, Sector 5, Bandra West',
-          city: 'Mumbai',
-          state: 'Maharashtra',
-          pincode: '400050',
+          name: 'Central Rental Hub',
+          address: 'Plot 42, Metro Ring Road, South City, Bangalore, 560034',
+          city: 'Bangalore',
+          state: 'Karnataka',
+          pincode: '560034',
         },
         operatingHours: {
-          openTime: '07:00 AM',
-          closeTime: '09:00 PM',
+          openTime: '08:00 AM',
+          closeTime: '09:30 PM',
         },
         upiId: 'roadeagle@upi',
-        rentalTerms: [
-          'Mandatory at pickup: Driving licence, ID proof, 2 photos',
-          '1 Helmet included complimentary with every bike rental',
-          'Zero hidden charges; security deposit refunded immediately upon return inspection',
-        ],
       });
     }
 
-    return res.status(200).json({ success: true, data: settings });
+    const raw = settings.toObject ? settings.toObject() : { ...settings };
+    const data = {
+      ...raw,
+      contactPhone: raw.contactPhone || '+91 98765 43210',
+      whatsappNumber: raw.whatsappNumber || raw.contactPhone || '+91 98765 43210',
+      hubName: raw.hubName || raw.defaultPickupHub?.name || 'Central Rental Hub',
+      hubAddress: raw.hubAddress || raw.defaultPickupHub?.address || 'Plot 42, Metro Ring Road, South City, Bangalore, 560034',
+      mapUrl: raw.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(raw.hubAddress || raw.defaultPickupHub?.address || 'Bangalore')}`,
+      contactEmail: raw.contactEmail || 'rentals@theroadeagle.com',
+      operatingHoursText: raw.operatingHoursText || 'Monday – Sunday: 08:00 AM – 09:30 PM',
+      operatingHoursSubtext: raw.operatingHoursSubtext || '24/7 emergency roadside support active',
+      emailResponseTime: raw.emailResponseTime || 'Within 2 business hours',
+    };
+
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     console.error('[Owner getBusinessSettings Error]:', error);
     return res.status(500).json({ success: false, message: 'Failed to retrieve business settings.' });
@@ -69,19 +72,19 @@ export async function getBusinessSettings(req, res) {
  */
 export async function updateBusinessSettings(req, res) {
   try {
-    const updateData = req.body;
-    let settings = await BusinessSettingModel.findOne();
+    const updateData = req.body || {};
 
-    if (!settings) {
-      const ownerUserId = req.user?.id || req.user?._id;
-      settings = await BusinessSettingModel.create({
-        ownerUserId,
-        ...updateData,
-      });
-    } else {
-      Object.assign(settings, updateData);
-      await settings.save();
+    if (updateData.hubAddress || updateData.hubName) {
+      updateData.defaultPickupHub = updateData.defaultPickupHub || {};
+      if (updateData.hubAddress) updateData.defaultPickupHub.address = updateData.hubAddress;
+      if (updateData.hubName) updateData.defaultPickupHub.name = updateData.hubName;
     }
+
+    const settings = await BusinessSettingModel.findOneAndUpdate(
+      {},
+      { $set: updateData },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
     return res.status(200).json({
       success: true,
@@ -90,7 +93,7 @@ export async function updateBusinessSettings(req, res) {
     });
   } catch (error) {
     console.error('[Owner updateBusinessSettings Error]:', error);
-    return res.status(500).json({ success: false, message: 'Failed to update business settings.' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to update business settings.' });
   }
 }
 

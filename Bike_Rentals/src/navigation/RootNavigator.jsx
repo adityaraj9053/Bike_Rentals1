@@ -47,6 +47,8 @@ function BottomTabNavigator({
   onRentBikePress,
   onOpenBookingDetails,
   sharedBikes,
+  contactSettings,
+  onContactSettingsUpdated,
 }) {
   const { t } = useLanguage();
   const isOwner = isOwnerUser(user);
@@ -193,6 +195,9 @@ function BottomTabNavigator({
         {(props) => (
           <ContactScreen
             {...props}
+            user={user}
+            contactSettings={contactSettings}
+            onContactSettingsUpdated={onContactSettingsUpdated}
             onShowToast={onShowToast}
             onOpenWhatsApp={onOpenWhatsApp}
           />
@@ -212,6 +217,8 @@ export default function RootNavigator({
   onOpenBookModal,
   onShowToast,
   sharedBikes,
+  contactSettings,
+  onContactSettingsUpdated,
   onBikeSubmitted,
   onBikeUpdated,
   onBikeDeleted,
@@ -248,6 +255,8 @@ export default function RootNavigator({
             onRentBikePress={onRentBikePress}
             onOpenBookingDetails={onOpenBookingDetails}
             sharedBikes={sharedBikes}
+            contactSettings={contactSettings}
+            onContactSettingsUpdated={onContactSettingsUpdated}
           />
         )}
       </Stack.Screen>
