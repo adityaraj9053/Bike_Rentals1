@@ -407,10 +407,30 @@ export default function BikeCard({
           </View>
 
           <View style={styles.actionButtonsRow}>
-            {/* 👑 OWNER CONTROLS: Publish/Unpublish + Icon-only Edit + Icon-only Delete */}
+            {/* 👑 OWNER CONTROLS: Edit (icon) + Delete (icon) + Publish/Unpublish (extreme right end) */}
             {isOwner ? (
               <View style={styles.ownerActionsGroup}>
-                {/* 1. Publish / Unpublish Toggle Button */}
+                {/* 1. Edit Button (Icon Only) */}
+                <TouchableOpacity
+                  style={[styles.cardIconBtn, styles.cardEditIconBtn, compact && styles.cardIconBtnCompact]}
+                  onPress={() => onSelectBike && onSelectBike(bike)}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Edit Motorcycle Details"
+                >
+                  <Edit3 size={compact ? 13 : 14} color="#000000" strokeWidth={2.4} />
+                </TouchableOpacity>
+
+                {/* 2. Delete Button (Icon Only) */}
+                <TouchableOpacity
+                  style={[styles.cardIconBtn, styles.cardDeleteIconBtn, compact && styles.cardIconBtnCompact]}
+                  onPress={() => setShowDeleteModal(true)}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Delete Motorcycle from Database"
+                >
+                  <Trash2 size={compact ? 13 : 14} color="#EF4444" strokeWidth={2.4} />
+                </TouchableOpacity>
+
+                {/* 3. Publish / Unpublish Toggle Button (Extreme Right End) */}
                 <TouchableOpacity
                   style={[
                     styles.cardPublishBtn,
@@ -423,39 +443,19 @@ export default function BikeCard({
                 >
                   {isBikePublished ? (
                     <>
-                      <EyeOff size={13} color="#CBD5E1" strokeWidth={2.2} />
+                      <EyeOff size={compact ? 11 : 12} color="#CBD5E1" strokeWidth={2.2} />
                       <Text style={[styles.cardPublishBtnText, styles.cardUnpublishBtnText, compact && styles.cardPublishBtnTextCompact]}>
                         {isHindi ? 'अप्रकाशित करें' : 'Unpublish'}
                       </Text>
                     </>
                   ) : (
                     <>
-                      <Eye size={13} color="#FFFFFF" strokeWidth={2.4} />
+                      <Eye size={compact ? 11 : 12} color="#FFFFFF" strokeWidth={2.4} />
                       <Text style={[styles.cardPublishBtnText, styles.cardPublishBtnActiveText, compact && styles.cardPublishBtnTextCompact]}>
                         {isHindi ? 'प्रकाशित करें' : 'Publish'}
                       </Text>
                     </>
                   )}
-                </TouchableOpacity>
-
-                {/* 2. Edit Button (Icon Only) */}
-                <TouchableOpacity
-                  style={[styles.cardIconBtn, styles.cardEditIconBtn, compact && styles.cardIconBtnCompact]}
-                  onPress={() => onSelectBike && onSelectBike(bike)}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Edit Motorcycle Details"
-                >
-                  <Edit3 size={15} color="#000000" strokeWidth={2.4} />
-                </TouchableOpacity>
-
-                {/* 3. Delete Button (Icon Only) */}
-                <TouchableOpacity
-                  style={[styles.cardIconBtn, styles.cardDeleteIconBtn, compact && styles.cardIconBtnCompact]}
-                  onPress={() => setShowDeleteModal(true)}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Delete Motorcycle from Database"
-                >
-                  <Trash2 size={15} color="#EF4444" strokeWidth={2.4} />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -843,54 +843,60 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderCard,
-    gap: 8,
+    gap: 6,
   },
   footerRowCompact: {
     paddingTop: 8,
+    gap: 4,
   },
   priceBlock: {
-    flex: 1,
+    flexShrink: 0,
+    marginRight: 4,
   },
-  priceBlockCompact: {},
+  priceBlockCompact: {
+    marginRight: 2,
+  },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   fromLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: COLORS.textMuted,
     marginRight: 2,
   },
   fromLabelCompact: {
-    fontSize: 10,
+    fontSize: 9.5,
   },
   priceValue: {
-    fontSize: 16.5,
+    fontSize: 15.5,
     fontWeight: '900',
     color: '#38BDF8',
   },
   priceValueCompact: {
-    fontSize: 15,
+    fontSize: 14,
   },
   perDayLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: COLORS.textMuted,
     marginLeft: 1,
   },
   perDayLabelCompact: {
-    fontSize: 10,
+    fontSize: 9.5,
   },
   inrSubtext: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: COLORS.textMuted,
     marginTop: 1,
   },
   inrSubtextCompact: {
-    fontSize: 9,
+    fontSize: 8.5,
   },
   actionButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 0,
     gap: 6,
   },
   cardWhatsAppBtn: {
@@ -956,29 +962,31 @@ const styles = StyleSheet.create({
   ownerActionsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'flex-end',
+    gap: 5,
+    flexShrink: 0,
   },
   cardPublishBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5.5,
     borderRadius: RADIUS.full,
     borderWidth: 1,
   },
   cardPublishBtnCompact: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 4.5,
+    gap: 3,
   },
   cardPublishBtnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   cardPublishBtnTextCompact: {
-    fontSize: 10.5,
+    fontSize: 9.5,
   },
   cardUnpublishBtn: {
     backgroundColor: 'rgba(100, 116, 139, 0.18)',
@@ -995,16 +1003,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cardIconBtn: {
-    width: 33,
-    height: 33,
-    borderRadius: 16.5,
+    width: 29,
+    height: 29,
+    borderRadius: 14.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardIconBtnCompact: {
-    width: 29,
-    height: 29,
-    borderRadius: 14.5,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
   },
   cardEditIconBtn: {
     backgroundColor: '#F59E0B',
