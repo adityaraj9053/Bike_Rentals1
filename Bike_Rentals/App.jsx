@@ -675,10 +675,11 @@ export default function App() {
                 visible={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
                 user={user}
-                onNavigate={(screen) => {
+                sharedBikes={sharedBikes}
+                onNavigate={(screen, params) => {
                   setIsSidebarOpen(false);
                   if (navigationRef.current) {
-                    navigationRef.current.navigate(screen);
+                    navigationRef.current.navigate(screen, params);
                   }
                 }}
                 onSignOut={handleSignOut}

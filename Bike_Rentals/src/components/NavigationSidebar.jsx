@@ -22,6 +22,7 @@ import {
   Phone,
   Mail,
   Award,
+  EyeOff,
 } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { isOwnerUser } from '../utils/authUtils';
@@ -30,6 +31,7 @@ export default function NavigationSidebar({
   visible,
   onClose,
   user,
+  sharedBikes = [],
   onNavigate,
   onSignOut,
 }) {
@@ -52,6 +54,10 @@ export default function NavigationSidebar({
   const userInitial = (user?.name || user?.fullName || user?.email || 'U').trim().charAt(0).toUpperCase();
   const userName = user?.fullName || user?.name || 'Registered Rider';
   const userEmail = user?.email || '';
+
+  const unpublishedCount = (sharedBikes || []).filter(
+    (b) => b.isPublished === false || b.status === 'UNPUBLISHED'
+  ).length;
 
   const handleItemPress = (screenName) => {
     onClose();
@@ -174,6 +180,35 @@ export default function NavigationSidebar({
                 </View>
 
                 <ChevronRight size={16} color="#F59E0B" />
+              </TouchableOpacity>
+            )}
+
+            {/* If Owner: Unpublished Bikes (Only visible in owner's account) */}
+            {isOwner && (
+              <TouchableOpacity
+                style={[styles.menuItemCard, styles.unpublishedMenuItemCard]}
+                onPress={() => handleItemPress('UnpublishedBikes')}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(239, 68, 68, 0.14)' }]}>
+                  <EyeOff size={18} color="#F87171" />
+                </View>
+
+                <View style={styles.menuItemTextContainer}>
+                  <View style={styles.menuItemTitleRow}>
+                    <Text style={[styles.menuItemTitle, { color: '#F87171' }]}>Unpublished Bikes</Text>
+                    {unpublishedCount > 0 && (
+                      <View style={styles.unpublishedCountBadge}>
+                        <Text style={styles.unpublishedCountBadgeText}>{unpublishedCount} Hidden</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.menuItemSub}>
+                    Manage hidden fleet motorcycles, update status & republish
+                  </Text>
+                </View>
+
+                <ChevronRight size={16} color="#F87171" />
               </TouchableOpacity>
             )}
 
@@ -357,6 +392,24 @@ const styles = StyleSheet.create({
   ownerMenuItemCard: {
     borderColor: 'rgba(245, 158, 11, 0.25)',
     backgroundColor: 'rgba(30, 27, 75, 0.4)',
+  },
+  unpublishedMenuItemCard: {
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    backgroundColor: 'rgba(30, 27, 75, 0.35)',
+    marginTop: 8,
+  },
+  unpublishedCountBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  unpublishedCountBadgeText: {
+    color: '#FCA5A5',
+    fontSize: 10,
+    fontWeight: '700',
   },
   menuIconContainer: {
     width: 38,

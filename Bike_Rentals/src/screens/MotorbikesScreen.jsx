@@ -63,13 +63,22 @@ export default function MotorbikesScreen({
   const cardWidth = Math.floor((availableWidth - (numColumns - 1) * gap) / numColumns);
   const isCompact = cardWidth < 250;
 
-  const categories = [
-    { id: 'all', label: t('fleet.allBikes', 'All Fleet') },
-    { id: 'scooters', label: t('fleet.scooters', 'Scooters') },
-    { id: 'commuter', label: t('fleet.commuters', 'Commuters') },
-    { id: 'cruiser', label: t('fleet.cruisers', 'Cruisers') },
-    { id: 'premium', label: t('fleet.premium', 'Premium') },
-  ];
+  const isOwner = user?.role === 'OWNER';
+  const currentUserId = user?.id || user?._id;
+
+  const categories = useMemo(() => {
+    const list = [
+      { id: 'all', label: t('fleet.allBikes', 'All Fleet') },
+      { id: 'scooters', label: t('fleet.scooters', 'Scooters') },
+      { id: 'commuter', label: t('fleet.commuters', 'Commuters') },
+      { id: 'cruiser', label: t('fleet.cruisers', 'Cruisers') },
+      { id: 'premium', label: t('fleet.premium', 'Premium') },
+    ];
+    if (isOwner) {
+      list.push({ id: 'unpublished', label: isHindi ? 'अप्रकाशित' : 'Unpublished' });
+    }
+    return list;
+  }, [t, isOwner, isHindi]);
 
   const sortOptions = [
     { id: 'newest', label: t('fleet.featured', 'Featured') },
@@ -77,9 +86,6 @@ export default function MotorbikesScreen({
     { id: 'price-desc', label: t('fleet.priceHigh', 'Price: High to Low') },
     { id: 'rating', label: isHindi ? 'शीर्ष रेटेड' : 'Top Rated' },
   ];
-
-  const isOwner = user?.role === 'OWNER';
-  const currentUserId = user?.id || user?._id;
 
   const filteredBikes = useMemo(() => {
     let result = activeFleet.filter((b) => {
@@ -121,13 +127,15 @@ export default function MotorbikesScreen({
       const selCatLower = (selectedCategory || 'all').toLowerCase();
 
       const matchCategory =
-        selCatLower === 'all' ||
-        catKeyLower === selCatLower ||
-        catLower.includes(selCatLower) ||
-        (selCatLower === 'scooters' && (catKeyLower.includes('scooter') || catLower.includes('scooter') || catLower.includes('ev'))) ||
-        (selCatLower === 'cruiser' && (catKeyLower.includes('cruiser') || catLower.includes('cruiser') || catLower.includes('tourer'))) ||
-        (selCatLower === 'commuter' && (catKeyLower.includes('commuter') || catLower.includes('commuter') || catKeyLower === 'sports' || catLower.includes('sport') || catKeyLower === 'adventure')) ||
-        (selCatLower === 'premium' && (Number(b.pricePerDay || b.dailyPrice || 0) >= 1200 || catLower.includes('premium') || catLower.includes('bmw') || catLower.includes('ducati') || catLower.includes('harley') || catLower.includes('kawasaki')));
+        selCatLower === 'unpublished'
+          ? (b.isPublished === false || b.status === 'UNPUBLISHED')
+          : selCatLower === 'all' ||
+            catKeyLower === selCatLower ||
+            catLower.includes(selCatLower) ||
+            (selCatLower === 'scooters' && (catKeyLower.includes('scooter') || catLower.includes('scooter') || catLower.includes('ev'))) ||
+            (selCatLower === 'cruiser' && (catKeyLower.includes('cruiser') || catLower.includes('cruiser') || catLower.includes('tourer'))) ||
+            (selCatLower === 'commuter' && (catKeyLower.includes('commuter') || catLower.includes('commuter') || catKeyLower === 'sports' || catLower.includes('sport') || catKeyLower === 'adventure')) ||
+            (selCatLower === 'premium' && (Number(b.pricePerDay || b.dailyPrice || 0) >= 1200 || catLower.includes('premium') || catLower.includes('bmw') || catLower.includes('ducati') || catLower.includes('harley') || catLower.includes('kawasaki')));
 
       const matchSearch =
         !searchQuery.trim() ||

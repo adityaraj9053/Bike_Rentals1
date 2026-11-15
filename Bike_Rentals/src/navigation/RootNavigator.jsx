@@ -22,6 +22,7 @@ import RentBikeScreen from '../screens/RentBikeScreen';
 import MyBookingsScreen from '../screens/MyBookingsScreen';
 import UserDetailsScreen from '../screens/UserDetailsScreen';
 import BuyerDetailsScreen from '../screens/BuyerDetailsScreen';
+import UnpublishedBikesScreen from '../screens/UnpublishedBikesScreen';
 
 import CustomHeader from '../components/CustomHeader';
 
@@ -331,6 +332,27 @@ export default function RootNavigator({
             sharedBikes={sharedBikes}
             onSignOut={onSignOut}
             onShowToast={onShowToast}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="UnpublishedBikes"
+        options={{
+          headerShown: false,
+        }}
+      >
+        {(props) => (
+          <UnpublishedBikesScreen
+            {...props}
+            user={user}
+            sharedBikes={sharedBikes}
+            onSelectBike={onSelectBike}
+            onBikeUpdated={onBikeUpdated}
+            onBikeDeleted={onBikeDeleted}
+            onShowToast={onShowToast}
+            onOpenWhatsApp={onOpenWhatsApp}
+            onRentBikePress={onRentBikePress}
           />
         )}
       </Stack.Screen>
