@@ -99,6 +99,7 @@ const BikeSchema = new Schema({
   doorstepDeliveryAvailable: { type: Boolean, default: false },
   doorstepDeliveryFee: { type: Number, default: 0 },
   isFeatured: { type: Boolean, default: false },
+  isPublished: { type: Boolean, default: true, index: true },
   rating: { type: Number, default: 5.0 },
   reviewsCount: { type: Number, default: 0 },
   status: { type: String, default: 'APPROVED', index: true },

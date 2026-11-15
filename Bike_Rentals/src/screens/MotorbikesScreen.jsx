@@ -23,7 +23,9 @@ export default function MotorbikesScreen({
   onOpenBookModal,
   onOpenWhatsApp,
   onOpenBookingDetails,
+  onBikeUpdated,
   onBikeDeleted,
+  onShowToast,
   sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
@@ -81,6 +83,13 @@ export default function MotorbikesScreen({
 
   const filteredBikes = useMemo(() => {
     let result = activeFleet.filter((b) => {
+      // 🔒 Non-owner users must not see unpublished bikes
+      if (!isOwner) {
+        if (b.isPublished === false || b.status === 'UNPUBLISHED') {
+          return false;
+        }
+      }
+
       const hasActiveBooking = Boolean(
         b.currentBookingId &&
         (typeof b.currentBookingId === 'object'
@@ -254,7 +263,9 @@ export default function MotorbikesScreen({
                 onOpenBookModal={onOpenBookModal}
                 onOpenWhatsApp={onOpenWhatsApp}
                 onOpenBookingDetails={onOpenBookingDetails}
+                onBikeUpdated={onBikeUpdated}
                 onBikeDeleted={onBikeDeleted}
+                onShowToast={onShowToast}
               />
             </View>
           ))}

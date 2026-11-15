@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  EyeOff,
   Edit3,
   Trash2,
 } from 'lucide-react-native';
@@ -39,6 +40,7 @@ export default function BikeDetailsScreen({
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookModal,
+  onBikeUpdated,
   onBikeDeleted,
   onShowToast,
 }) {
@@ -49,6 +51,47 @@ export default function BikeDetailsScreen({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const bike = route?.params?.bike || BIKES_DATA[0];
+  const [currentBike, setCurrentBike] = useState(bike);
+  const isBikePublished = currentBike.isPublished !== false && currentBike.status !== 'UNPUBLISHED';
+
+  useEffect(() => {
+    setCurrentBike(route?.params?.bike || BIKES_DATA[0]);
+  }, [route?.params?.bike]);
+
+  const handleTogglePublish = async () => {
+    const nextPublished = !isBikePublished;
+    const bikeId = currentBike._id || currentBike.id || currentBike.listingCode;
+    const updated = {
+      ...currentBike,
+      isPublished: nextPublished,
+      status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+      statusBadge: nextPublished ? 'AVAILABLE' : 'UNPUBLISHED',
+    };
+    setCurrentBike(updated);
+    if (onBikeUpdated) {
+      onBikeUpdated(updated);
+    }
+    try {
+      await ownerAPI.updateBike(bikeId, {
+        isPublished: nextPublished,
+        status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+      }).catch(() =>
+        bikesAPI.update(bikeId, {
+          isPublished: nextPublished,
+          status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+        })
+      );
+    } catch (err) {
+      console.warn('[BikeDetailsScreen] Publish toggle error:', err);
+    }
+    if (onShowToast) {
+      onShowToast(
+        nextPublished
+          ? 'Motorcycle published. Now visible in fleet to all riders!'
+          : 'Motorcycle unpublished. Hidden from all riders.'
+      );
+    }
+  };
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
@@ -282,16 +325,39 @@ export default function BikeDetailsScreen({
                 </TouchableOpacity>
               )}
 
-              {/* Replace "Enquire on WhatsApp" with "Delete Motorcycle" for Owner's Account */}
+              {/* Owner Action Buttons: Publish/Unpublish + Delete + Edit */}
               {isOwner ? (
-                <TouchableOpacity
-                  style={styles.ownerDeleteBtn}
-                  onPress={() => setShowDeleteModal(true)}
-                  activeOpacity={0.8}
-                >
-                  <Trash2 size={15} color="#EF4444" strokeWidth={2.4} />
-                  <Text style={styles.ownerDeleteBtnText}>Delete Motorcycle</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.ownerPublishBtn,
+                      isBikePublished ? styles.ownerUnpublishBtn : styles.ownerPublishBtnActive,
+                    ]}
+                    onPress={handleTogglePublish}
+                    activeOpacity={0.8}
+                  >
+                    {isBikePublished ? (
+                      <>
+                        <EyeOff size={14} color="#CBD5E1" strokeWidth={2.2} />
+                        <Text style={styles.ownerUnpublishBtnText}>Unpublish</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={14} color="#FFFFFF" strokeWidth={2.4} />
+                        <Text style={styles.ownerPublishBtnText}>Publish</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.ownerDeleteBtn}
+                    onPress={() => setShowDeleteModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Trash2 size={15} color="#EF4444" strokeWidth={2.4} />
+                    <Text style={styles.ownerDeleteBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                </>
               ) : (
                 <TouchableOpacity
                   style={styles.whatsAppBtn}
@@ -815,6 +881,35 @@ const styles = StyleSheet.create({
   },
   ownerDeleteBtnText: {
     color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  ownerPublishBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  ownerUnpublishBtn: {
+    backgroundColor: 'rgba(100, 116, 139, 0.18)',
+    borderColor: 'rgba(148, 163, 184, 0.35)',
+  },
+  ownerUnpublishBtnText: {
+    color: '#CBD5E1',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  ownerPublishBtnActive: {
+    backgroundColor: '#059669',
+    borderColor: '#10B981',
+  },
+  ownerPublishBtnText: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
   },

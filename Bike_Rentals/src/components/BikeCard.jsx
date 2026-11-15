@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText, Edit3, Trash2 } from 'lucide-react-native';
+import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText, Edit3, Trash2, Eye, EyeOff } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import WhatsAppIcon from './WhatsAppIcon';
@@ -23,7 +23,9 @@ export default function BikeCard({
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookingDetails,
+  onBikeUpdated,
   onBikeDeleted,
+  onShowToast,
   style,
   compact = false,
 }) {
@@ -59,6 +61,44 @@ export default function BikeCard({
     )
   );
   const isOwnerViewing = Boolean(isOwner && bike.isBooked && hasActiveBooking);
+  const isBikePublished = bike.isPublished !== false && bike.status !== 'UNPUBLISHED';
+
+  const handleTogglePublish = async () => {
+    const nextPublished = !isBikePublished;
+    const bikeId = bike._id || bike.id || bike.listingCode;
+    const updatedBike = {
+      ...bike,
+      isPublished: nextPublished,
+      status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+      statusBadge: nextPublished ? 'AVAILABLE' : 'UNPUBLISHED',
+    };
+
+    if (onBikeUpdated) {
+      onBikeUpdated(updatedBike);
+    }
+
+    try {
+      await ownerAPI.updateBike(bikeId, {
+        isPublished: nextPublished,
+        status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+      }).catch(() =>
+        bikesAPI.update(bikeId, {
+          isPublished: nextPublished,
+          status: nextPublished ? 'APPROVED' : 'UNPUBLISHED',
+        })
+      );
+    } catch (err) {
+      console.warn('[BikeCard] Error toggling publish status:', err);
+    }
+
+    if (onShowToast) {
+      onShowToast(
+        nextPublished
+          ? `Motorcycle "${bikeName}" published. Now visible in fleet to all riders!`
+          : `Motorcycle "${bikeName}" unpublished. Hidden from all riders.`
+      );
+    }
+  };
 
   const price = Number(bike.pricePerDay ?? bike.dailyPrice ?? 0);
   const deposit = Number(bike.deposit ?? bike.securityDeposit ?? 0);
@@ -262,7 +302,9 @@ export default function BikeCard({
               styles.statusBadge,
               compact && styles.badgeCompact,
               {
-                backgroundColor: bike.isBooked
+                backgroundColor: !isBikePublished
+                  ? 'rgba(100, 116, 139, 0.95)'
+                  : bike.isBooked
                   ? 'rgba(239, 68, 68, 0.9)'
                   : isLimited
                   ? 'rgba(245, 158, 11, 0.9)'
@@ -271,7 +313,9 @@ export default function BikeCard({
             ]}
           >
             <Text style={[styles.statusBadgeText, compact && styles.badgeTextCompact]}>
-              {bike.isBooked
+              {!isBikePublished
+                ? (isHindi ? 'अप्रकाशित' : 'UNPUBLISHED')
+                : bike.isBooked
                 ? (isHindi ? 'आरक्षित' : 'RESERVED')
                 : isLimited
                 ? (isHindi ? 'सीमित' : 'LIMITED')
@@ -363,34 +407,57 @@ export default function BikeCard({
           </View>
 
           <View style={styles.actionButtonsRow}>
-            {/* Quick Edit Details Button for Owner */}
-            {isOwner && (
-              <TouchableOpacity
-                style={[styles.cardOwnerActionBtn, compact && styles.cardOwnerActionBtnCompact]}
-                onPress={() => onSelectBike && onSelectBike(bike)}
-                activeOpacity={0.8}
-                accessibilityLabel="Edit Motorcycle Details"
-              >
-                <Edit3 size={13} color="#000000" strokeWidth={2.4} />
-                <Text style={[styles.cardOwnerActionBtnText, compact && styles.cardOwnerActionBtnTextCompact]}>
-                  {isHindi ? 'विवरण बदलें' : 'Edit Details'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Replace "Enquire on WhatsApp" with "Delete" Button on Fleet for Owner's Account */}
+            {/* 👑 OWNER CONTROLS: Publish/Unpublish + Icon-only Edit + Icon-only Delete */}
             {isOwner ? (
-              <TouchableOpacity
-                style={[styles.cardDeleteBtn, compact && styles.cardDeleteBtnCompact]}
-                onPress={() => setShowDeleteModal(true)}
-                activeOpacity={0.8}
-                accessibilityLabel="Delete Motorcycle from Database"
-              >
-                <Trash2 size={13} color="#EF4444" strokeWidth={2.4} />
-                <Text style={[styles.cardDeleteBtnText, compact && styles.cardDeleteBtnTextCompact]}>
-                  {isHindi ? 'हटाएं' : 'Delete'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.ownerActionsGroup}>
+                {/* 1. Publish / Unpublish Toggle Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.cardPublishBtn,
+                    isBikePublished ? styles.cardUnpublishBtn : styles.cardPublishBtnActive,
+                    compact && styles.cardPublishBtnCompact,
+                  ]}
+                  onPress={handleTogglePublish}
+                  activeOpacity={0.8}
+                  accessibilityLabel={isBikePublished ? 'Unpublish Motorcycle' : 'Publish Motorcycle'}
+                >
+                  {isBikePublished ? (
+                    <>
+                      <EyeOff size={13} color="#CBD5E1" strokeWidth={2.2} />
+                      <Text style={[styles.cardPublishBtnText, styles.cardUnpublishBtnText, compact && styles.cardPublishBtnTextCompact]}>
+                        {isHindi ? 'अप्रकाशित करें' : 'Unpublish'}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Eye size={13} color="#FFFFFF" strokeWidth={2.4} />
+                      <Text style={[styles.cardPublishBtnText, styles.cardPublishBtnActiveText, compact && styles.cardPublishBtnTextCompact]}>
+                        {isHindi ? 'प्रकाशित करें' : 'Publish'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* 2. Edit Button (Icon Only) */}
+                <TouchableOpacity
+                  style={[styles.cardIconBtn, styles.cardEditIconBtn, compact && styles.cardIconBtnCompact]}
+                  onPress={() => onSelectBike && onSelectBike(bike)}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Edit Motorcycle Details"
+                >
+                  <Edit3 size={15} color="#000000" strokeWidth={2.4} />
+                </TouchableOpacity>
+
+                {/* 3. Delete Button (Icon Only) */}
+                <TouchableOpacity
+                  style={[styles.cardIconBtn, styles.cardDeleteIconBtn, compact && styles.cardIconBtnCompact]}
+                  onPress={() => setShowDeleteModal(true)}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Delete Motorcycle from Database"
+                >
+                  <Trash2 size={15} color="#EF4444" strokeWidth={2.4} />
+                </TouchableOpacity>
+              </View>
             ) : (
               /* Non-Owner: Quick WhatsApp Action Button */
               <TouchableOpacity
@@ -886,52 +953,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  cardOwnerActionBtn: {
-    backgroundColor: '#F59E0B',
+  ownerActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardPublishBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: RADIUS.full,
+    borderWidth: 1,
   },
-  cardOwnerActionBtnCompact: {
-    paddingHorizontal: 9,
+  cardPublishBtnCompact: {
+    paddingHorizontal: 8,
     paddingVertical: 5,
     gap: 4,
   },
-  cardOwnerActionBtnText: {
-    color: '#000000',
+  cardPublishBtnText: {
     fontSize: 11.5,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  cardOwnerActionBtnTextCompact: {
+  cardPublishBtnTextCompact: {
     fontSize: 10.5,
   },
-  cardDeleteBtn: {
+  cardUnpublishBtn: {
+    backgroundColor: 'rgba(100, 116, 139, 0.18)',
+    borderColor: 'rgba(148, 163, 184, 0.35)',
+  },
+  cardUnpublishBtnText: {
+    color: '#CBD5E1',
+  },
+  cardPublishBtnActive: {
+    backgroundColor: '#059669',
+    borderColor: '#10B981',
+  },
+  cardPublishBtnActiveText: {
+    color: '#FFFFFF',
+  },
+  cardIconBtn: {
+    width: 33,
+    height: 33,
+    borderRadius: 16.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardIconBtnCompact: {
+    width: 29,
+    height: 29,
+    borderRadius: 14.5,
+  },
+  cardEditIconBtn: {
+    backgroundColor: '#F59E0B',
+  },
+  cardDeleteIconBtn: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: RADIUS.full,
-  },
-  cardDeleteBtnCompact: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    gap: 4,
-  },
-  cardDeleteBtnText: {
-    color: '#EF4444',
-    fontSize: 11.5,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  cardDeleteBtnTextCompact: {
-    fontSize: 10.5,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
   },
 });

@@ -29,6 +29,12 @@ export async function getAllBikes(req, res) {
 
     const baseFilter = {};
 
+    // 🔒 Non-owner users must not see unpublished bikes
+    if (!isOwner) {
+      baseFilter.isPublished = { $ne: false };
+      baseFilter.status = { $ne: 'UNPUBLISHED' };
+    }
+
     if (category && category !== 'all') {
       const catMap = {
         cruiser: 'Cruiser Bikes',

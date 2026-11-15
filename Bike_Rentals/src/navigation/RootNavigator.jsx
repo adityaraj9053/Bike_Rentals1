@@ -97,7 +97,9 @@ function BottomTabNavigator({
             onOpenBookModal={onOpenBookModal}
             onRentBikePress={onRentBikePress}
             onOpenBookingDetails={onOpenBookingDetails}
+            onBikeUpdated={onBikeUpdated}
             onBikeDeleted={onBikeDeleted}
+            onShowToast={onShowToast}
             sharedBikes={sharedBikes}
           />
         )}
@@ -119,7 +121,9 @@ function BottomTabNavigator({
             onOpenBookModal={onOpenBookModal}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookingDetails={onOpenBookingDetails}
+            onBikeUpdated={onBikeUpdated}
             onBikeDeleted={onBikeDeleted}
+            onShowToast={onShowToast}
             sharedBikes={sharedBikes}
           />
         )}
@@ -353,6 +357,7 @@ export default function RootNavigator({
             onStartBooking={onStartBooking}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookModal={onOpenBookModal}
+            onBikeUpdated={onBikeUpdated}
             onBikeDeleted={onBikeDeleted}
             onShowToast={onShowToast}
           />

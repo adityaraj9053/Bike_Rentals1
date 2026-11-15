@@ -44,7 +44,9 @@ export default function HomeScreen({
   onOpenBookModal,
   onRentBikePress,
   onOpenBookingDetails,
+  onBikeUpdated,
   onBikeDeleted,
+  onShowToast,
   sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
@@ -75,6 +77,12 @@ export default function HomeScreen({
   // Conditional Fleet Visibility
   const visibleFleet = useMemo(() => {
     return activeFleet.filter((bike) => {
+      // 🔒 Non-owner users must not see unpublished bikes
+      if (!isOwner) {
+        if (bike.isPublished === false || bike.status === 'UNPUBLISHED') {
+          return false;
+        }
+      }
       if (isOwner) return true;
       const hasActiveBooking = Boolean(
         bike.currentBookingId &&
@@ -330,7 +338,9 @@ export default function HomeScreen({
                   onStartBooking={onStartBooking}
                   onOpenBookModal={onOpenBookModal}
                   onOpenBookingDetails={onOpenBookingDetails}
+                  onBikeUpdated={onBikeUpdated}
                   onBikeDeleted={onBikeDeleted}
+                  onShowToast={onShowToast}
                   style={styles.carouselCard}
                 />
               ))}
