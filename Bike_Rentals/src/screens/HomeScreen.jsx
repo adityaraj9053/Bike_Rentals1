@@ -44,6 +44,7 @@ export default function HomeScreen({
   onOpenBookModal,
   onRentBikePress,
   onOpenBookingDetails,
+  onBikeDeleted,
   sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
@@ -329,6 +330,7 @@ export default function HomeScreen({
                   onStartBooking={onStartBooking}
                   onOpenBookModal={onOpenBookModal}
                   onOpenBookingDetails={onOpenBookingDetails}
+                  onBikeDeleted={onBikeDeleted}
                   style={styles.carouselCard}
                 />
               ))}

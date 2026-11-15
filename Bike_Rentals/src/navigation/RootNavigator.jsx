@@ -42,6 +42,7 @@ function BottomTabNavigator({
   onShowToast,
   onBikeSubmitted,
   onBikeUpdated,
+  onBikeDeleted,
   onRentBikePress,
   onOpenBookingDetails,
   sharedBikes,
@@ -96,6 +97,7 @@ function BottomTabNavigator({
             onOpenBookModal={onOpenBookModal}
             onRentBikePress={onRentBikePress}
             onOpenBookingDetails={onOpenBookingDetails}
+            onBikeDeleted={onBikeDeleted}
             sharedBikes={sharedBikes}
           />
         )}
@@ -117,6 +119,7 @@ function BottomTabNavigator({
             onOpenBookModal={onOpenBookModal}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookingDetails={onOpenBookingDetails}
+            onBikeDeleted={onBikeDeleted}
             sharedBikes={sharedBikes}
           />
         )}
@@ -206,6 +209,7 @@ export default function RootNavigator({
   sharedBikes,
   onBikeSubmitted,
   onBikeUpdated,
+  onBikeDeleted,
   onRentBikePress,
   onOpenBookingDetails,
   onBookingConfirmed,
@@ -235,6 +239,7 @@ export default function RootNavigator({
             onShowToast={onShowToast}
             onBikeSubmitted={onBikeSubmitted}
             onBikeUpdated={onBikeUpdated}
+            onBikeDeleted={onBikeDeleted}
             onRentBikePress={onRentBikePress}
             onOpenBookingDetails={onOpenBookingDetails}
             sharedBikes={sharedBikes}
@@ -348,6 +353,8 @@ export default function RootNavigator({
             onStartBooking={onStartBooking}
             onOpenWhatsApp={onOpenWhatsApp}
             onOpenBookModal={onOpenBookModal}
+            onBikeDeleted={onBikeDeleted}
+            onShowToast={onShowToast}
           />
         )}
       </Stack.Screen>

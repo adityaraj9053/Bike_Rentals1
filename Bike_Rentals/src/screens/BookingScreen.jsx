@@ -43,6 +43,7 @@ import PhoneInput from '../components/PhoneInput';
 import { validateEmail, validatePhone } from '../utils/validation';
 import { bookingsAPI, paymentAPI, documentsAPI } from '../services/api';
 import { loadRazorpayScript, getRazorpayKeyId } from '../services/razorpay';
+import { isOwnerUser } from '../utils/authUtils';
 
 const PICKUP_TIMES = [
   '09:00 AM (Hub Opens)',
@@ -78,6 +79,14 @@ export default function BookingScreen({
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
   const isMobile = width < 768;
+
+  // Owners cannot access the reservation/booking page
+  useEffect(() => {
+    if (isOwnerUser(user)) {
+      if (onShowToast) onShowToast('Owners cannot book motorcycles. Use the Owner Portal to manage listings.');
+      navigation?.navigate('MainTabs', { screen: 'Motorbikes' });
+    }
+  }, [user]);
 
   // Pre-load Razorpay checkout script on web
   useEffect(() => {

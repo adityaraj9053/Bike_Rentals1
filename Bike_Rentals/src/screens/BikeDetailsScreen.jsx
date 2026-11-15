@@ -22,11 +22,15 @@ import {
   ChevronRight,
   Eye,
   Edit3,
+  Trash2,
 } from 'lucide-react-native';
 import { BIKES_DATA } from '../data/bikes';
 import { resolveImage } from '../assets/images';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import WhatsAppIcon from '../components/WhatsAppIcon';
+import { isOwnerUser } from '../utils/authUtils';
+import DeleteBikePromptModal from '../components/DeleteBikePromptModal';
+import { ownerAPI, bikesAPI } from '../services/api';
 
 export default function BikeDetailsScreen({
   route,
@@ -35,9 +39,14 @@ export default function BikeDetailsScreen({
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookModal,
+  onBikeDeleted,
+  onShowToast,
 }) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+  const isOwner = isOwnerUser(user);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const bike = route?.params?.bike || BIKES_DATA[0];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -255,31 +264,46 @@ export default function BikeDetailsScreen({
 
             {/* Clean, Proportionate Action Buttons */}
             <View style={[styles.actionsRow, isMobile && styles.actionsRowMobile]}>
-              <TouchableOpacity
-                style={styles.bookBtn}
-                onPress={() => {
-                  if (onStartBooking) {
-                    onStartBooking(bike);
-                  } else if (onOpenBookModal) {
-                    onOpenBookModal(bike);
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.bookBtnText}>Book This Bike</Text>
-                <ArrowRight size={15} color="#FFFFFF" strokeWidth={2.5} />
-              </TouchableOpacity>
+              {/* Book This Bike Button (STRICTLY HIDDEN in Owner's Account) */}
+              {!isOwner && (
+                <TouchableOpacity
+                  style={styles.bookBtn}
+                  onPress={() => {
+                    if (onStartBooking) {
+                      onStartBooking(bike);
+                    } else if (onOpenBookModal) {
+                      onOpenBookModal(bike);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.bookBtnText}>Book This Bike</Text>
+                  <ArrowRight size={15} color="#FFFFFF" strokeWidth={2.5} />
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={styles.whatsAppBtn}
-                onPress={() => onOpenWhatsApp(bike)}
-                activeOpacity={0.8}
-              >
-                <WhatsAppIcon size={14} color="#FFFFFF" withCircle circleSize={24} />
-                <Text style={styles.whatsAppBtnText}>Enquire on WhatsApp</Text>
-              </TouchableOpacity>
+              {/* Replace "Enquire on WhatsApp" with "Delete Motorcycle" for Owner's Account */}
+              {isOwner ? (
+                <TouchableOpacity
+                  style={styles.ownerDeleteBtn}
+                  onPress={() => setShowDeleteModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Trash2 size={15} color="#EF4444" strokeWidth={2.4} />
+                  <Text style={styles.ownerDeleteBtnText}>Delete Motorcycle</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.whatsAppBtn}
+                  onPress={() => onOpenWhatsApp(bike)}
+                  activeOpacity={0.8}
+                >
+                  <WhatsAppIcon size={14} color="#FFFFFF" withCircle circleSize={24} />
+                  <Text style={styles.whatsAppBtnText}>Enquire on WhatsApp</Text>
+                </TouchableOpacity>
+              )}
 
-              {user?.role === 'OWNER' && (
+              {isOwner && (
                 <TouchableOpacity
                   style={styles.ownerEditBtn}
                   onPress={() => navigation?.navigate('RentBike', { bikeToEdit: bike })}
@@ -407,22 +431,60 @@ export default function BikeDetailsScreen({
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.stickyBookBtn}
-            onPress={() => {
-              if (onStartBooking) {
-                onStartBooking(bike);
-              } else if (onOpenBookModal) {
-                onOpenBookModal(bike);
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.stickyBookBtnText}>Book This Bike</Text>
-            <ArrowRight size={15} color="#FFFFFF" strokeWidth={2.5} />
-          </TouchableOpacity>
+          {isOwner ? (
+            <TouchableOpacity
+              style={[styles.stickyBookBtn, { backgroundColor: '#F59E0B' }]}
+              onPress={() => navigation?.navigate('RentBike', { bikeToEdit: bike })}
+              activeOpacity={0.8}
+            >
+              <Edit3 size={15} color="#000000" strokeWidth={2.4} />
+              <Text style={[styles.stickyBookBtnText, { color: '#000000' }]}>Edit Bike Details</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.stickyBookBtn}
+              onPress={() => {
+                if (onStartBooking) {
+                  onStartBooking(bike);
+                } else if (onOpenBookModal) {
+                  onOpenBookModal(bike);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.stickyBookBtnText}>Book This Bike</Text>
+              <ArrowRight size={15} color="#FFFFFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
+
+      {/* Confirmation Prompt Modal to Completely Delete Bike from Database */}
+      <DeleteBikePromptModal
+        visible={showDeleteModal}
+        bike={bike}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={async () => {
+          const bikeId = bike._id || bike.id || bike.listingCode;
+          setIsDeleting(true);
+          try {
+            await ownerAPI.deleteBike(bikeId).catch(() => bikesAPI.delete(bikeId));
+          } catch (err) {
+            console.warn('[BikeDetailsScreen] Delete API error:', err);
+          }
+          setIsDeleting(false);
+          setShowDeleteModal(false);
+          if (onBikeDeleted) {
+            onBikeDeleted(bike);
+          }
+          if (onShowToast) {
+            onShowToast('Motorcycle completely deleted from database.');
+          }
+          navigation?.navigate('MainTabs', { screen: 'Motorbikes' });
+        }}
+        isDeleting={isDeleting}
+        isHindi={false}
+      />
     </View>
   );
 }
@@ -737,6 +799,24 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     borderColor: '#7DD3FC',
+  },
+  ownerDeleteBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: RADIUS.full,
+  },
+  ownerDeleteBtnText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '800',
   },
   ownerEditBtnText: {
     color: '#000000',

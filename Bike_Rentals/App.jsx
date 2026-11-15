@@ -364,6 +364,24 @@ export default function App() {
     showToast(`Motorcycle ${updatedBike.registrationNumber || updatedBike.name || updatedBike.model} updated successfully!`);
   };
 
+  const handleBikeDeleted = (deletedBikeOrId) => {
+    const targetId = typeof deletedBikeOrId === 'object'
+      ? (deletedBikeOrId._id || deletedBikeOrId.id || deletedBikeOrId.listingCode || deletedBikeOrId.registrationNumber)
+      : deletedBikeOrId;
+
+    setSharedBikes((prev) =>
+      prev.filter((b) => {
+        if (b._id && (b._id === targetId || b.id === targetId)) return false;
+        if (b.id && (b.id === targetId || b._id === targetId)) return false;
+        if (b.listingCode && b.listingCode === targetId) return false;
+        if (b.registrationNumber && b.registrationNumber === targetId) return false;
+        return true;
+      })
+    );
+    fetchFleet();
+    showToast('Motorcycle completely deleted from database.');
+  };
+
   const handleBookingConfirmed = (bookingData, targetBike) => {
     const bikeId = targetBike?._id || targetBike?.id || targetBike?.listingCode;
     const bookedUserId = user?.id || user?._id || bookingData?.renterId?._id || bookingData?.renterId;
@@ -446,6 +464,11 @@ export default function App() {
   const handleStartBooking = (bike) => {
     const target = bike || selectedBike || BIKES_DATA[0];
     setSelectedBike(target);
+
+    if (isOwnerUser(user)) {
+      showToast('Owners cannot book motorcycles. Please use the owner portal to manage listings.');
+      return;
+    }
 
     if (!user) {
       setPendingBookingBike(target);
@@ -599,6 +622,7 @@ export default function App() {
                 sharedBikes={sharedBikes}
                 onBikeSubmitted={handleBikeSubmitted}
                 onBikeUpdated={handleBikeUpdated}
+                onBikeDeleted={handleBikeDeleted}
                 onRentBikePress={handleRentBikePress}
                 onBookingConfirmed={handleBookingConfirmed}
                 onSignOut={handleSignOut}

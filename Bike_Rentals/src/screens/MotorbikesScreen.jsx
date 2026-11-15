@@ -23,6 +23,7 @@ export default function MotorbikesScreen({
   onOpenBookModal,
   onOpenWhatsApp,
   onOpenBookingDetails,
+  onBikeDeleted,
   sharedBikes,
 }) {
   const { t, isHindi } = useLanguage();
@@ -253,6 +254,7 @@ export default function MotorbikesScreen({
                 onOpenBookModal={onOpenBookModal}
                 onOpenWhatsApp={onOpenWhatsApp}
                 onOpenBookingDetails={onOpenBookingDetails}
+                onBikeDeleted={onBikeDeleted}
               />
             </View>
           ))}

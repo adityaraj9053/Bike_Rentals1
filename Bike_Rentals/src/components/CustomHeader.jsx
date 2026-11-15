@@ -88,14 +88,16 @@ export default function CustomHeader({
         </View>
 
         <View style={[styles.headerRight, isMobile && styles.headerRightMobile]}>
-          {/* Quick Book Action - Directly navigates to Fleet (Motorbikes) page */}
-          <TouchableOpacity
-            style={[styles.headerBookBtn, isVerySmall && styles.headerBookBtnSmall]}
-            onPress={handleBookPress}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.headerBookBtnText}>{t('nav.bookNow', 'Book Now')}</Text>
-          </TouchableOpacity>
+          {/* Quick Book Action (HIDDEN in Owner's Account) */}
+          {!isOwner && (
+            <TouchableOpacity
+              style={[styles.headerBookBtn, isVerySmall && styles.headerBookBtnSmall]}
+              onPress={handleBookPress}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerBookBtnText}>{t('nav.bookNow', 'Book Now')}</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Language Switcher Toggle next to Login */}
           <TouchableOpacity

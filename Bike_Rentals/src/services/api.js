@@ -209,6 +209,11 @@ export const bikesAPI = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  delete: (id) =>
+    request(`/bikes/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 // 3. Bookings & Quotation APIs

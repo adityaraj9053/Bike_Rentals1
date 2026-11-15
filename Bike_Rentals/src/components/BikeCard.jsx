@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText, Edit3 } from 'lucide-react-native';
+import { Star, Zap, Fuel, Cog, ArrowRight, CheckCircle2, User, FileText, Edit3, Trash2 } from 'lucide-react-native';
 import { COLORS, RADIUS, SHADOWS } from '../theme/colors';
 import { useLanguage } from '../i18n/LanguageContext';
 import WhatsAppIcon from './WhatsAppIcon';
+import { isOwnerUser } from '../utils/authUtils';
+import DeleteBikePromptModal from './DeleteBikePromptModal';
+import { ownerAPI, bikesAPI } from '../services/api';
 
 export default function BikeCard({
   bike,
@@ -20,13 +23,17 @@ export default function BikeCard({
   onStartBooking,
   onOpenWhatsApp,
   onOpenBookingDetails,
+  onBikeDeleted,
   style,
   compact = false,
 }) {
   const { t, isHindi } = useLanguage();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   if (!bike) return null;
 
   const activeUser = currentUser || user;
+  const isOwner = isOwnerUser(activeUser);
   const currentUserId = activeUser?.id || activeUser?._id;
   const bookedUserId = bike.currentBookedByUserId?._id || bike.currentBookedByUserId;
   const bookedUserEmail = (
@@ -51,7 +58,7 @@ export default function BikeCard({
       bike.isMyBooking
     )
   );
-  const isOwnerViewing = Boolean(activeUser?.role === 'OWNER' && bike.isBooked && hasActiveBooking);
+  const isOwnerViewing = Boolean(isOwner && bike.isBooked && hasActiveBooking);
 
   const price = Number(bike.pricePerDay ?? bike.dailyPrice ?? 0);
   const deposit = Number(bike.deposit ?? bike.securityDeposit ?? 0);
@@ -356,56 +363,99 @@ export default function BikeCard({
           </View>
 
           <View style={styles.actionButtonsRow}>
-            {/* Quick Edit for Owner */}
-            {activeUser?.role === 'OWNER' && (
+            {/* Quick Edit Details Button for Owner */}
+            {isOwner && (
               <TouchableOpacity
-                style={styles.cardEditBtn}
+                style={[styles.cardOwnerActionBtn, compact && styles.cardOwnerActionBtnCompact]}
                 onPress={() => onSelectBike && onSelectBike(bike)}
                 activeOpacity={0.8}
-                accessibilityLabel="Edit Bike Details"
+                accessibilityLabel="Edit Motorcycle Details"
               >
-                <Edit3 size={14} color="#38BDF8" strokeWidth={2.4} />
+                <Edit3 size={13} color="#000000" strokeWidth={2.4} />
+                <Text style={[styles.cardOwnerActionBtnText, compact && styles.cardOwnerActionBtnTextCompact]}>
+                  {isHindi ? 'विवरण बदलें' : 'Edit Details'}
+                </Text>
               </TouchableOpacity>
             )}
 
-            {/* Quick WhatsApp Action Button */}
-            <TouchableOpacity
-              style={styles.cardWhatsAppBtn}
-              onPress={() => onOpenWhatsApp && onOpenWhatsApp(bike)}
-              activeOpacity={0.8}
-              accessibilityLabel="Enquire on WhatsApp"
-            >
-              <WhatsAppIcon size={14} color="#FFFFFF" withCircle circleSize={28} />
-            </TouchableOpacity>
+            {/* Replace "Enquire on WhatsApp" with "Delete" Button on Fleet for Owner's Account */}
+            {isOwner ? (
+              <TouchableOpacity
+                style={[styles.cardDeleteBtn, compact && styles.cardDeleteBtnCompact]}
+                onPress={() => setShowDeleteModal(true)}
+                activeOpacity={0.8}
+                accessibilityLabel="Delete Motorcycle from Database"
+              >
+                <Trash2 size={13} color="#EF4444" strokeWidth={2.4} />
+                <Text style={[styles.cardDeleteBtnText, compact && styles.cardDeleteBtnTextCompact]}>
+                  {isHindi ? 'हटाएं' : 'Delete'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              /* Non-Owner: Quick WhatsApp Action Button */
+              <TouchableOpacity
+                style={styles.cardWhatsAppBtn}
+                onPress={() => onOpenWhatsApp && onOpenWhatsApp(bike)}
+                activeOpacity={0.8}
+                accessibilityLabel="Enquire on WhatsApp"
+              >
+                <WhatsAppIcon size={14} color="#FFFFFF" withCircle circleSize={28} />
+              </TouchableOpacity>
+            )}
 
-            {/* Book Now Button */}
-            <TouchableOpacity
-              style={[
-                styles.bookBtn,
-                compact && styles.bookBtnCompact,
-                bike.isBooked && { backgroundColor: '#334155', opacity: 0.8 },
-              ]}
-              disabled={Boolean(bike.isBooked)}
-              onPress={() => {
-                if (bike.isBooked) return;
-                if (onStartBooking) {
-                  onStartBooking(bike);
-                } else if (onSelectBike) {
-                  onSelectBike(bike);
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.bookBtnText, compact && styles.bookBtnTextCompact]}>
-                {bike.isBooked ? (isHindi ? 'आरक्षित' : 'Reserved') : t('fleet.bookBtn', 'Book')}
-              </Text>
-              {!bike.isBooked && (
-                <ArrowRight size={compact ? 12 : 13} color="#FFFFFF" strokeWidth={2.2} />
-              )}
-            </TouchableOpacity>
+            {/* Book Now Button (STRICTLY HIDDEN in Owner's Account) */}
+            {!isOwner && (
+              <TouchableOpacity
+                style={[
+                  styles.bookBtn,
+                  compact && styles.bookBtnCompact,
+                  bike.isBooked && { backgroundColor: '#334155', opacity: 0.8 },
+                ]}
+                disabled={Boolean(bike.isBooked)}
+                onPress={() => {
+                  if (bike.isBooked) return;
+                  if (onStartBooking) {
+                    onStartBooking(bike);
+                  } else if (onSelectBike) {
+                    onSelectBike(bike);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.bookBtnText, compact && styles.bookBtnTextCompact]}>
+                  {bike.isBooked ? (isHindi ? 'आरक्षित' : 'Reserved') : t('fleet.bookBtn', 'Book')}
+                </Text>
+                {!bike.isBooked && (
+                  <ArrowRight size={compact ? 12 : 13} color="#FFFFFF" strokeWidth={2.2} />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
+
+      {/* Confirmation Prompt Modal to Completely Delete Bike from Database */}
+      <DeleteBikePromptModal
+        visible={showDeleteModal}
+        bike={bike}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={async () => {
+          const bikeId = bike._id || bike.id || bike.listingCode;
+          setIsDeleting(true);
+          try {
+            await ownerAPI.deleteBike(bikeId).catch(() => bikesAPI.delete(bikeId));
+          } catch (err) {
+            console.warn('[BikeCard] Delete API error:', err);
+          }
+          setIsDeleting(false);
+          setShowDeleteModal(false);
+          if (onBikeDeleted) {
+            onBikeDeleted(bike);
+          }
+        }}
+        isDeleting={isDeleting}
+        isHindi={isHindi}
+      />
     </View>
   );
 }
@@ -835,5 +885,53 @@ const styles = StyleSheet.create({
     color: '#38BDF8',
     fontSize: 12,
     fontWeight: '700',
+  },
+  cardOwnerActionBtn: {
+    backgroundColor: '#F59E0B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+  },
+  cardOwnerActionBtnCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  cardOwnerActionBtnText: {
+    color: '#000000',
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  cardOwnerActionBtnTextCompact: {
+    fontSize: 10.5,
+  },
+  cardDeleteBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+  },
+  cardDeleteBtnCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  cardDeleteBtnText: {
+    color: '#EF4444',
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  cardDeleteBtnTextCompact: {
+    fontSize: 10.5,
   },
 });

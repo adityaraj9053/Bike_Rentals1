@@ -544,7 +544,11 @@ export async function updateBike(req, res) {
 export async function deleteBike(req, res) {
   try {
     const { id } = req.params;
-    const bike = await BikeModel.findByIdAndDelete(id);
+    const query = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ _id: id }, { listingCode: id }, { registrationNumber: id }] }
+      : { $or: [{ listingCode: id }, { registrationNumber: id }] };
+
+    const bike = await BikeModel.findOneAndDelete(query);
     if (!bike) {
       return res.status(404).json({ success: false, message: 'Motorcycle not found.' });
     }
