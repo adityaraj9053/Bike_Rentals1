@@ -43,12 +43,23 @@ export default function BikeDetailsScreen({
   onBikeUpdated,
   onBikeDeleted,
   onShowToast,
+  contactSettings,
 }) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const isOwner = isOwnerUser(user);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const effectiveSettings = contactSettings || (() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem('the_road_eagle_contact_settings');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  })();
 
   const bike = route?.params?.bike || BIKES_DATA[0];
   const [currentBike, setCurrentBike] = useState(bike);
@@ -301,7 +312,7 @@ export default function BikeDetailsScreen({
             <View style={styles.availabilityBanner}>
               <CheckCircle2 size={15} color="#10B981" />
               <Text style={styles.availabilityText}>
-                {bike.availability || 'Available for immediate pickup at Central Hub'}
+                {bike.availability || `Available for immediate pickup at ${effectiveSettings?.hubName || 'Central Hub'}`}
               </Text>
             </View>
 

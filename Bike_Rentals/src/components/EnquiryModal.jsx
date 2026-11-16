@@ -38,10 +38,21 @@ export default function EnquiryModal({
   onClose,
   selectedBike,
   onShowToast,
+  contactSettings,
 }) {
   const { t, isHindi } = useLanguage();
   const { width } = useWindowDimensions();
   const isMobile = width < 480;
+
+  const effectiveSettings = contactSettings || (() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem('the_road_eagle_contact_settings');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  })();
 
   const [bikeId, setBikeId] = useState(selectedBike?.id || BIKES_DATA[0].id);
   const [fullName, setFullName] = useState('');
@@ -95,7 +106,13 @@ export default function EnquiryModal({
       `Phone: ${formattedPhone}\n` +
       (message ? `Note: ${message}` : '')
     );
-    Linking.openURL(`https://wa.9304618599?text=${text}`).catch(() => {});
+    const targetWaNumber = (
+      effectiveSettings?.whatsappNumber ||
+      effectiveSettings?.contactPhone ||
+      '919304618599'
+    ).replace(/[^0-9]/g, '');
+
+    Linking.openURL(`https://wa.me/${targetWaNumber}?text=${text}`).catch(() => {});
     if (onShowToast) onShowToast(isHindi ? `${currentBike.name} के लिए व्हाट्सएप खुल रहा है!` : `Opening WhatsApp concierge for ${currentBike.name}!`);
     onClose();
   };
@@ -179,7 +196,9 @@ export default function EnquiryModal({
                 <View style={styles.supportBadge}>
                   <View style={styles.pulseDot} />
                   <Text style={styles.supportBadgeText}>
-                    {t('enquiry.verifiedSupport', '+91 98765 43210 • 24/7 Verified Support')}
+                    {effectiveSettings?.contactPhone
+                      ? `${effectiveSettings.contactPhone} • 24/7 Verified Support`
+                      : t('enquiry.verifiedSupport', '+91 98765 43210 • 24/7 Verified Support')}
                   </Text>
                 </View>
               </View>

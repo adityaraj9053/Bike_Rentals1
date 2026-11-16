@@ -110,10 +110,33 @@ export default function ContactScreen({
   const [emailResponseTime, setEmailResponseTime] = useState(initialSettings.emailResponseTime || DEFAULT_SETTINGS.emailResponseTime);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Synchronize when contactSettings prop updates from App.jsx
+  // Synchronize when contactSettings prop updates from App.jsx or localStorage
   useEffect(() => {
     if (contactSettings) {
       applySettings(contactSettings);
+    }
+
+    const handleStorage = (e) => {
+      if (e.key === 'the_road_eagle_contact_settings' && e.newValue) {
+        try {
+          applySettings(JSON.parse(e.newValue));
+        } catch (err) {}
+      }
+    };
+
+    const handleCustom = (e) => {
+      if (e.detail) {
+        applySettings(e.detail);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage);
+      window.addEventListener('the_road_eagle_contact_updated', handleCustom);
+      return () => {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('the_road_eagle_contact_updated', handleCustom);
+      };
     }
   }, [contactSettings]);
 
@@ -196,6 +219,7 @@ export default function ContactScreen({
           'the_road_eagle_contact_settings',
           JSON.stringify(updatedSettings)
         );
+        window.dispatchEvent(new CustomEvent('the_road_eagle_contact_updated', { detail: updatedSettings }));
       }
 
       await ownerAPI.updateSettings(updatedSettings).catch(() => null);
@@ -229,22 +253,32 @@ export default function ContactScreen({
 
   const handleOpenMaps = () => {
     const targetUrl =
-      mapUrl.trim() ||
-      `https://maps.google.com/?q=${encodeURIComponent(hubAddress || 'Central Rental Hub Bangalore')}`;
+      (mapUrl || contactSettings?.mapUrl || '').trim() ||
+      `https://maps.google.com/?q=${encodeURIComponent(hubAddress || contactSettings?.hubAddress || 'Central Rental Hub Bangalore')}`;
     Linking.openURL(targetUrl).catch(() => {});
   };
 
   const handleCall = () => {
-    const rawNumber = (contactPhone || '').replace(/[^0-9+]/g, '');
+    const rawNumber = (contactPhone || contactSettings?.contactPhone || DEFAULT_SETTINGS.contactPhone).replace(/[^0-9+]/g, '');
     if (rawNumber) {
       Linking.openURL(`tel:${rawNumber}`).catch(() => {});
     }
   };
 
   const handleEmail = () => {
-    if (contactEmail) {
-      Linking.openURL(`mailto:${contactEmail.trim()}`).catch(() => {});
+    const email = (contactEmail || contactSettings?.contactEmail || DEFAULT_SETTINGS.contactEmail).trim();
+    if (email) {
+      Linking.openURL(`mailto:${email}`).catch(() => {});
     }
+  };
+
+  const handleRiderWhatsAppPress = () => {
+    const rawNum = whatsappNumber || contactSettings?.whatsappNumber || contactPhone || contactSettings?.contactPhone || '9876543210';
+    const cleanNum = rawNum.replace(/[^0-9]/g, '');
+    const text = encodeURIComponent("Hello The Road Eagle! I would like to inquire about booking a motorcycle from your fleet.");
+    Linking.openURL(`https://wa.me/${cleanNum}?text=${text}`).catch(() => {
+      if (onOpenWhatsApp) onOpenWhatsApp();
+    });
   };
 
   // Submit Rider Enquiry Form (Only for non-owners)
@@ -732,12 +766,14 @@ export default function ContactScreen({
                   <Text style={styles.actionCardTitle}>
                     {isHindi ? 'त्वरित कॉल' : 'Instant Call'}
                   </Text>
-                  <Text style={styles.actionCardSub}>{contactPhone}</Text>
+                  <Text style={styles.actionCardSub}>
+                    {contactPhone || contactSettings?.contactPhone || DEFAULT_SETTINGS.contactPhone}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.quickActionCard}
-                  onPress={onOpenWhatsApp}
+                  onPress={handleRiderWhatsAppPress}
                   activeOpacity={0.8}
                 >
                   <View style={[styles.actionIconCircle, { backgroundColor: 'rgba(37, 211, 102, 0.15)' }]}>
@@ -758,8 +794,12 @@ export default function ContactScreen({
                     <MapPin size={20} color={COLORS.accentCyan} />
                   </View>
                   <View style={styles.infoTextWrap}>
-                    <Text style={styles.infoTitle}>{hubName || 'Central Rental Hub'}</Text>
-                    <Text style={styles.infoText}>{hubAddress}</Text>
+                    <Text style={styles.infoTitle}>
+                      {hubName || contactSettings?.hubName || 'Central Rental Hub'}
+                    </Text>
+                    <Text style={styles.infoText}>
+                      {hubAddress || contactSettings?.hubAddress || DEFAULT_SETTINGS.hubAddress}
+                    </Text>
                     <TouchableOpacity onPress={handleOpenMaps} activeOpacity={0.7}>
                       <Text style={styles.mapLink}>
                         {isHindi ? 'गूगल मैप्स पर देखें →' : 'View on Google Maps →'}
@@ -778,8 +818,12 @@ export default function ContactScreen({
                     <Text style={styles.infoTitle}>
                       {isHindi ? 'कार्य समय' : 'Operating Hours'}
                     </Text>
-                    <Text style={styles.infoText}>{operatingHours}</Text>
-                    <Text style={styles.infoSubText}>{operatingHoursSub}</Text>
+                    <Text style={styles.infoText}>
+                      {operatingHours || contactSettings?.operatingHoursText || DEFAULT_SETTINGS.operatingHoursText}
+                    </Text>
+                    <Text style={styles.infoSubText}>
+                      {operatingHoursSub || contactSettings?.operatingHoursSubtext || DEFAULT_SETTINGS.operatingHoursSubtext}
+                    </Text>
                   </View>
                 </View>
 
@@ -794,10 +838,12 @@ export default function ContactScreen({
                       {isHindi ? 'ईमेल पूछताछ' : 'Email Enquiries'}
                     </Text>
                     <TouchableOpacity onPress={handleEmail} activeOpacity={0.7}>
-                      <Text style={[styles.infoText, styles.emailLinkText]}>{contactEmail}</Text>
+                      <Text style={[styles.infoText, styles.emailLinkText]}>
+                        {contactEmail || contactSettings?.contactEmail || DEFAULT_SETTINGS.contactEmail}
+                      </Text>
                     </TouchableOpacity>
                     <Text style={styles.infoSubText}>
-                      Response time: {emailResponseTime}
+                      Response time: {emailResponseTime || contactSettings?.emailResponseTime || DEFAULT_SETTINGS.emailResponseTime}
                     </Text>
                   </View>
                 </View>

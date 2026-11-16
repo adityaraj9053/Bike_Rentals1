@@ -71,10 +71,22 @@ export default function BookingScreen({
   user,
   onOpenAuth,
   onBookingConfirmed,
+  contactSettings,
 }) {
   const { t, isHindi } = useLanguage();
   const selectedBike = route?.params?.bike || BIKES_DATA[0];
   const [step, setStep] = useState(1);
+
+  // Live dynamic contact & hub settings (reads prop with instant localStorage fallback)
+  const activeContactSettings = contactSettings || (() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem('the_road_eagle_contact_settings');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  })();
 
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
@@ -951,10 +963,14 @@ export default function BookingScreen({
                       {t('booking.hubLocation', 'PICKUP & RETURN HUB')}
                     </Text>
                     <Text style={styles.hubDetailsName}>
-                      {t('booking.hubName', 'Central Motorcycle Hub (Ring Road, Sector 4)')}
+                      {activeContactSettings?.hubName
+                        ? `${activeContactSettings.hubName}${activeContactSettings.hubAddress ? ` (${activeContactSettings.hubAddress})` : ''}`
+                        : t('booking.hubName', 'Central Motorcycle Hub (Ring Road, Sector 4)')}
                     </Text>
                     <Text style={styles.hubDetailsNote}>
-                      {t('booking.hubNote', 'Open daily 08:00 AM – 09:00 PM. Doorstep delivery available upon request.')}
+                      {activeContactSettings?.operatingHoursText
+                        ? `${activeContactSettings.operatingHoursText}. ${activeContactSettings.operatingHoursSubtext || 'Doorstep delivery available upon request.'}`
+                        : t('booking.hubNote', 'Open daily 08:00 AM – 09:00 PM. Doorstep delivery available upon request.')}
                     </Text>
                   </View>
 

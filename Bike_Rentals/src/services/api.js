@@ -273,7 +273,7 @@ export const bookingsAPI = {
 
 // 4. Fleet Management & Business Settings (Owner Only)
 export const ownerAPI = {
-  getSettings: () => request('/owner/settings'),
+  getSettings: () => request('/owner/settings').catch(() => request('/settings')),
 
   updateSettings: (data) =>
     request('/owner/settings', {

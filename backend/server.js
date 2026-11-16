@@ -19,6 +19,7 @@ import uploadRoutes from './src/routes/uploadRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js';
 import documentRoutes from './src/routes/documentRoutes.js';
 import { openDocumentHandler } from './src/controllers/documentController.js';
+import { getBusinessSettings } from './src/controllers/ownerController.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -111,6 +112,10 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Public business and contact settings
+app.get('/api/v1/settings', getBusinessSettings);
+app.get('/api/settings', getBusinessSettings);
 
 // Register API Routes (Both /api/v1 and /api for high compatibility)
 app.use('/api/v1/auth', authRoutes);

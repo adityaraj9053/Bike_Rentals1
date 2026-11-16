@@ -36,8 +36,23 @@ export default function BookDropdown({
     };
   }, [dropdownRef]);
 
-  const phoneNumber = "+919876543210";
-  const displayPhone = "+91 98765 43210";
+  const effectiveSettings = (() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem('the_road_eagle_contact_settings');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  })();
+
+  const displayPhone = effectiveSettings?.contactPhone || "+91 98765 43210";
+  const phoneNumber = displayPhone.replace(/[^0-9+]/g, '');
+  const waTarget = (
+    effectiveSettings?.whatsappNumber ||
+    effectiveSettings?.contactPhone ||
+    '+919876543210'
+  ).replace(/[^0-9]/g, '');
 
   const handlePhoneClick = (e) => {
     e.stopPropagation();
@@ -57,14 +72,14 @@ export default function BookDropdown({
     if (onShowToast) {
       onShowToast(`Opening WhatsApp chat for ${bike?.name || 'bike'}...`);
     }
-    window.open(`https://api.whatsapp.com/send?phone=${phoneNumber.replace('+', '')}&text=${text}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?phone=${waTarget}&text=${text}`, '_blank');
   };
 
   const handleZaloClick = (e) => {
     e.stopPropagation();
     toggleDropdown(false);
     if (onShowToast) {
-      onShowToast(`Connecting to Zalo concierge (+91 98765 43210)...`);
+      onShowToast(`Connecting to Zalo concierge (${displayPhone})...`);
     }
     window.open(`https://zalo.me/${phoneNumber.replace('+', '')}`, '_blank');
   };

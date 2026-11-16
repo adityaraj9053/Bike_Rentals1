@@ -16,7 +16,7 @@ import {
  */
 export async function getBusinessSettings(req, res) {
   try {
-    let settings = await BusinessSettingModel.findOne();
+    let settings = await BusinessSettingModel.findOne().sort({ updatedAt: -1 });
 
     if (!settings) {
       settings = await BusinessSettingModel.create({

@@ -191,6 +191,31 @@ export default function App() {
       .catch((err) => {
         console.warn('[App] Contact settings load notice:', err.message);
       });
+
+    // Cross-tab and same-tab real-time sync for all riders and users
+    const handleStorageChange = (e) => {
+      if (e.key === 'the_road_eagle_contact_settings' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setContactSettings(parsed);
+        } catch (err) {}
+      }
+    };
+
+    const handleCustomChange = (e) => {
+      if (e.detail) {
+        setContactSettings((prev) => ({ ...prev, ...e.detail }));
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+      window.addEventListener('the_road_eagle_contact_updated', handleCustomChange);
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+        window.removeEventListener('the_road_eagle_contact_updated', handleCustomChange);
+      };
+    }
   }, []);
 
   const handleContactSettingsUpdated = (newSettings) => {
@@ -198,6 +223,7 @@ export default function App() {
       const updated = { ...prev, ...newSettings };
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('the_road_eagle_contact_settings', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('the_road_eagle_contact_updated', { detail: updated }));
       }
       return updated;
     });

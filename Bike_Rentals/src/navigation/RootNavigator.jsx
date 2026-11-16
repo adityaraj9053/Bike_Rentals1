@@ -391,6 +391,7 @@ export default function RootNavigator({
             onBikeUpdated={onBikeUpdated}
             onBikeDeleted={onBikeDeleted}
             onShowToast={onShowToast}
+            contactSettings={contactSettings}
           />
         )}
       </Stack.Screen>
@@ -420,6 +421,7 @@ export default function RootNavigator({
             onShowToast={onShowToast}
             onOpenWhatsApp={onOpenWhatsApp}
             onBookingConfirmed={onBookingConfirmed}
+            contactSettings={contactSettings}
           />
         )}
       </Stack.Screen>
