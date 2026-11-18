@@ -13,7 +13,7 @@ export const mailSender = async (email, title, body) => {
   // 1. Resend HTTPS REST API (Port 443 - Never blocked on Render or cloud hosts)
   if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim().length > 0) {
     try {
-      const fromEmail = process.env.MAIL_FROM || 'The Road Eagle <onboarding@resend.dev>';
+      const fromEmail = process.env.RESEND_FROM || process.env.MAIL_FROM || 'The Road Eagle <onboarding@resend.dev>';
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -43,7 +43,8 @@ export const mailSender = async (email, title, body) => {
   // 2. Brevo HTTPS REST API (Port 443 - Never blocked on Render or cloud hosts)
   if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim().length > 0) {
     try {
-      const senderEmail = process.env.MAIL_USER || 'gamedevelop06@gmail.com';
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.MAIL_USER || process.env.OWNER_EMAIL || 'gamedevelop06@gmail.com';
+      const senderName = process.env.BREVO_SENDER_NAME || 'The Road Eagle';
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -51,7 +52,7 @@ export const mailSender = async (email, title, body) => {
           'api-key': process.env.BREVO_API_KEY.trim(),
         },
         body: JSON.stringify({
-          sender: { name: 'The Road Eagle', email: senderEmail },
+          sender: { name: senderName, email: senderEmail },
           to: [{ email }],
           subject: title,
           htmlContent: body,
